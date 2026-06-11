@@ -96,32 +96,43 @@ class MovieCard(QWidget):
         # Overlay Buttons (Hidden by default)
         self.overlay = QWidget(self.poster_container)
         self.overlay.setFixedSize(160, 240)
-        self.overlay.setStyleSheet("background-color: rgba(0,0,0,0.5); border-radius: 12px;")
+        # Subtle gradient from top and bottom to make white icons pop
+        self.overlay.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0,0,0,0.6), stop:0.25 rgba(0,0,0,0), stop:0.75 rgba(0,0,0,0), stop:1 rgba(0,0,0,0.6));
+                border-radius: 12px;
+            }
+        """)
         overlay_layout = QVBoxLayout(self.overlay)
-        overlay_layout.setAlignment(Qt.AlignCenter)
+        overlay_layout.setContentsMargins(8, 8, 8, 8)
         
-        status = self.movie_data.get("status", None)
+        overlay_layout.addStretch()
         
-        if status != "watched":
-            btn_watched = QPushButton("Mark Watched")
-            btn_watched.setStyleSheet("background-color: #1AE0A1; color: #0F172A; border-radius: 6px; padding: 6px; font-weight: bold; margin-bottom: 5px;")
-            btn_watched.clicked.connect(lambda: self.on_status_change(self.movie_data, "watched"))
-            overlay_layout.addWidget(btn_watched)
-            
-        if status != "watch_later":
-            btn_later = QPushButton("Watch Later")
-            btn_later.setStyleSheet("background-color: rgba(255,255,255,0.2); color: white; border-radius: 6px; padding: 6px; font-weight: bold;")
-            btn_later.clicked.connect(lambda: self.on_status_change(self.movie_data, "watch_later"))
-            overlay_layout.addWidget(btn_later)
-            
-        if status:
-            btn_remove = QPushButton("Remove")
-            btn_remove.setStyleSheet("background-color: #EF4444; color: white; border-radius: 6px; padding: 6px; font-weight: bold; margin-top: 5px;")
-            btn_remove.clicked.connect(lambda: self.on_status_change(self.movie_data, "remove"))
-            overlay_layout.addWidget(btn_remove)
-            
+        btn_layout = QVBoxLayout()
+        btn_layout.setSpacing(8)
+        
+        self.btn_later = QPushButton()
+        self.btn_later.setFixedSize(32, 32)
+        self.btn_later.setCursor(Qt.PointingHandCursor)
+        self.btn_later.clicked.connect(lambda checked=False: self.on_action_click("watch_later"))
+        
+        self.btn_watched = QPushButton()
+        self.btn_watched.setFixedSize(32, 32)
+        self.btn_watched.setCursor(Qt.PointingHandCursor)
+        self.btn_watched.clicked.connect(lambda checked=False: self.on_action_click("watched"))
+        
+        btn_layout.addWidget(self.btn_later)
+        btn_layout.addWidget(self.btn_watched)
+        
+        bottom_row = QHBoxLayout()
+        bottom_row.addStretch()
+        bottom_row.addLayout(btn_layout)
+        
+        overlay_layout.addLayout(bottom_row)
+        
+        self.update_buttons()
+        
         self.overlay.hide()
-        
         layout.addWidget(self.poster_container)
         
         # Title
@@ -145,7 +156,47 @@ class MovieCard(QWidget):
         self.setLayout(layout)
         
         self.load_poster()
+
+    def on_action_click(self, target_status):
+        current_status = self.movie_data.get("status")
+        new_status = "remove" if current_status == target_status else target_status
+        if self.on_status_change:
+            self.on_status_change(self.movie_data, new_status)
+        self.update_buttons()
+
+    def update_buttons(self):
+        status = self.movie_data.get("status")
+        base_style = "border-radius: 15px; font-weight: bold; font-size: 16px; border: none;"
         
+        if status == "watched":
+            self.btn_watched.setText("✓")
+            self.btn_watched.setStyleSheet(f"""
+                QPushButton {{ {base_style} background-color: rgba(26, 224, 161, 0.4); color: #1AE0A1; }}
+                QPushButton:hover {{ background-color: rgba(26, 224, 161, 0.6); color: white; }}
+            """)
+            self.btn_watched.setToolTip("Remove from Watched")
+        else:
+            self.btn_watched.setText("✓")
+            self.btn_watched.setStyleSheet(f"""
+                QPushButton {{ {base_style} background-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.8); }}
+                QPushButton:hover {{ background-color: rgba(255, 255, 255, 0.25); color: white; }}
+            """)
+            self.btn_watched.setToolTip("Mark as Watched")
+            
+        if status == "watch_later":
+            self.btn_later.setText("+")
+            self.btn_later.setStyleSheet(f"""
+                QPushButton {{ {base_style} font-size: 20px; background-color: rgba(26, 224, 161, 0.4); color: #1AE0A1; padding-bottom: 2px; }}
+                QPushButton:hover {{ background-color: rgba(26, 224, 161, 0.6); color: white; }}
+            """)
+            self.btn_later.setToolTip("Remove from Watch Later")
+        else:
+            self.btn_later.setText("+")
+            self.btn_later.setStyleSheet(f"""
+                QPushButton {{ {base_style} font-size: 20px; background-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.8); padding-bottom: 2px; }}
+                QPushButton:hover {{ background-color: rgba(255, 255, 255, 0.25); color: white; }}
+            """)
+            self.btn_later.setToolTip("Add to Watch Later")
     def enterEvent(self, event):
         self.overlay.show()
         super().enterEvent(event)
@@ -218,7 +269,10 @@ class SeriesFolderCard(QWidget):
         count_label.setStyleSheet("color: #1AE0A1; font-weight: bold; border: none; background: transparent;")
         
         open_btn = QPushButton("View Collection")
-        open_btn.setProperty("class", "primary-btn")
+        open_btn.setStyleSheet("""
+            QPushButton { background-color: #1AE0A1; color: #0F172A; border-radius: 6px; padding: 10px 20px; font-weight: bold; }
+            QPushButton:hover { background-color: #14B885; }
+        """)
         open_btn.clicked.connect(lambda: on_click(series_name))
         
         overlay_layout.addWidget(title_label)

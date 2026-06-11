@@ -76,7 +76,7 @@ class HomePage(QWidget):
         if trending:
             from ui.components import HeroCarousel
             # Take top 3 trending movies for the carousel
-            banner = HeroCarousel(trending[:3], lambda m: self.on_movie_click(m))
+            banner = HeroCarousel(trending[:3], lambda m: self.on_movie_click(m), self.change_status)
             self.content_layout.addWidget(banner)
             self.content_layout.addSpacing(30)
             

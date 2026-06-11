@@ -108,14 +108,12 @@ class MovieDetailPage(QWidget):
         
         action_layout = QHBoxLayout()
         self.btn_watched = QPushButton("Mark Watched")
-        self.btn_watched.setStyleSheet("background-color: #1AE0A1; color: #0F172A; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 14px;")
         self.btn_watched.setCursor(Qt.PointingHandCursor)
-        self.btn_watched.clicked.connect(lambda: self.change_status(self.movie_data, "watched"))
+        self.btn_watched.clicked.connect(lambda: self.change_status(self.movie_data, "remove" if self.movie_data.get("status") == "watched" else "watched"))
         
         self.btn_later = QPushButton("Watch Later")
-        self.btn_later.setStyleSheet("background-color: rgba(255,255,255,0.1); color: white; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 14px;")
         self.btn_later.setCursor(Qt.PointingHandCursor)
-        self.btn_later.clicked.connect(lambda: self.change_status(self.movie_data, "watch_later"))
+        self.btn_later.clicked.connect(lambda: self.change_status(self.movie_data, "remove" if self.movie_data.get("status") == "watch_later" else "watch_later"))
         
         action_layout.addWidget(self.btn_watched)
         action_layout.addWidget(self.btn_later)
@@ -277,7 +275,7 @@ class MovieDetailPage(QWidget):
                 if amount >= 1_000_000: return f"${amount/1_000_000:.1f}M"
                 return f"${amount:,}"
                 
-            status = details.get("status", "-")
+            status = details.get("tmdb_status", "-")
             lang = details.get("original_language", "-")
             budget = format_money(details.get("budget", 0))
             revenue = format_money(details.get("revenue", 0))
@@ -302,9 +300,6 @@ class MovieDetailPage(QWidget):
             self.credits_label.setVisible(False)
             self.overview_label.setText(movie_data.get("overview", ""))
             
-        self.btn_watched.setText("Mark Watched" if movie_data.get("status") != "watched" else "✓ Watched")
-        self.btn_later.setText("Watch Later" if movie_data.get("status") != "watch_later" else "✓ Watch Later")
-
         # Load images
         if movie_data.get("backdrop_path"):
             bd_loader = ImageLoader(movie_data["backdrop_path"])
@@ -316,6 +311,37 @@ class MovieDetailPage(QWidget):
             poster_loader.signals.finished.connect(self.on_poster_loaded)
             QThreadPool.globalInstance().start(poster_loader)
             
+        self.update_buttons()
+        
+    def update_buttons(self):
+        status = self.movie_data.get("status")
+        
+        if status == "watched":
+            self.btn_watched.setText("✓ Watched")
+            self.btn_watched.setStyleSheet("""
+                QPushButton { background-color: #14B885; color: #0F172A; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 14px; border: none; }
+                QPushButton:hover { background-color: #1AE0A1; }
+            """)
+        else:
+            self.btn_watched.setText("Mark Watched")
+            self.btn_watched.setStyleSheet("""
+                QPushButton { background-color: #1AE0A1; color: #0F172A; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 14px; border: none; }
+                QPushButton:hover { background-color: #14B885; }
+            """)
+
+        if status == "watch_later":
+            self.btn_later.setText("✓ Watch Later")
+            self.btn_later.setStyleSheet("""
+                QPushButton { background-color: transparent; color: #1AE0A1; border: 1.5px solid #1AE0A1; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 14px; }
+                QPushButton:hover { background-color: rgba(26, 224, 161, 0.1); }
+            """)
+        else:
+            self.btn_later.setText("Watch Later")
+            self.btn_later.setStyleSheet("""
+                QPushButton { background-color: transparent; color: white; border: 1.5px solid rgba(255,255,255,0.6); border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 14px; }
+                QPushButton:hover { background-color: rgba(255,255,255,0.1); border-color: white; color: white; }
+            """)
+
     def on_backdrop_loaded(self, image_data):
         if image_data:
             img = QImage()

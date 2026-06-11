@@ -37,6 +37,16 @@ def _make_request(endpoint, params=None, retries=5):
             
     return {}
 
+import database
+
+def inject_db_status(movies_list):
+    if not movies_list:
+        return movies_list
+    db_cache = {m["id"]: m["status"] for m in database.get_movies()}
+    for m in movies_list:
+        m["status"] = db_cache.get(m["id"])
+    return movies_list
+
 def _format_movie(item):
     poster = item.get("poster_path")
     backdrop = item.get("backdrop_path")
@@ -51,19 +61,19 @@ def _format_movie(item):
 
 def search_movies(query, page=1):
     data = _make_request("/search/movie", {"query": query, "language": "en-US", "page": page, "include_adult": False})
-    return [_format_movie(m) for m in data.get("results", [])]
+    return inject_db_status([_format_movie(m) for m in data.get("results", [])])
 
 def get_trending(page=1, time_window="day"):
     data = _make_request(f"/trending/movie/{time_window}", {"page": page})
-    return [_format_movie(m) for m in data.get("results", [])]
+    return inject_db_status([_format_movie(m) for m in data.get("results", [])])
 
 def get_upcoming(page=1):
     data = _make_request("/movie/upcoming", {"language": "en-US", "page": page})
-    return [_format_movie(m) for m in data.get("results", [])]
+    return inject_db_status([_format_movie(m) for m in data.get("results", [])])
 
 def get_top_rated(page=1):
     data = _make_request("/movie/top_rated", {"language": "en-US", "page": page})
-    return [_format_movie(m) for m in data.get("results", [])]
+    return inject_db_status([_format_movie(m) for m in data.get("results", [])])
 
 def get_movie_details(movie_id):
     data = _make_request(f"/movie/{movie_id}", {"append_to_response": "credits,videos,similar"})
@@ -77,7 +87,7 @@ def get_movie_details(movie_id):
     movie["tagline"] = data.get("tagline", "")
     
     # Extended Facts
-    movie["status"] = data.get("status", "Unknown")
+    movie["tmdb_status"] = data.get("status", "Unknown")
     movie["budget"] = data.get("budget", 0)
     movie["revenue"] = data.get("revenue", 0)
     movie["original_language"] = data.get("original_language", "").upper()
@@ -99,7 +109,7 @@ def get_movie_details(movie_id):
     similar_data = data.get("similar", {}).get("results", [])
     movie["similar"] = [_format_movie(m) for m in similar_data]
     
-    return movie
+    return inject_db_status([movie])[0]
 
 def get_genres():
     data = _make_request("/genre/movie/list", {"language": "en-US"})
@@ -107,7 +117,7 @@ def get_genres():
 
 def get_movies_by_genre(genre_id, page=1):
     data = _make_request("/discover/movie", {"with_genres": genre_id, "language": "en-US", "page": page})
-    return [_format_movie(m) for m in data.get("results", [])]
+    return inject_db_status([_format_movie(m) for m in data.get("results", [])])
 
 def get_collection_poster(series_name):
     data = _make_request("/search/collection", {"query": series_name, "language": "en-US", "page": 1})
@@ -180,9 +190,9 @@ def advanced_discover(params, page=1):
         data = _make_request("/discover/movie", default_params)
         results = [_format_movie(m) for m in data.get("results", [])]
         
+    results = inject_db_status(results)
+    
     if show_me == "unseen":
-        watched_movies = database.get_movies("watched")
-        watched_ids = {m["id"] for m in watched_movies}
-        results = [m for m in results if m["id"] not in watched_ids]
+        results = [m for m in results if m["status"] != "watched"]
         
     return results

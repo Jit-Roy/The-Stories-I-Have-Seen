@@ -4,25 +4,7 @@ from PySide6.QtCore import Qt, QUrl, QRunnable, QThreadPool, Signal, QObject
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 import requests
 
-class ImageLoaderSignals(QObject):
-    finished = Signal(bytes)
-
-class ImageLoader(QRunnable):
-    def __init__(self, url):
-        super().__init__()
-        self.url = url
-        self.signals = ImageLoaderSignals()
-        
-    def run(self):
-        headers = {"User-Agent": "WorldsIveWatched/1.0"}
-        try:
-            r = requests.get(self.url, headers=headers, timeout=10)
-            if r.status_code == 200:
-                self.signals.finished.emit(r.content)
-            else:
-                self.signals.finished.emit(b"")
-        except Exception:
-            self.signals.finished.emit(b"")
+from ui.movie_card import ImageLoader
 
 class HorizontalCarousel(QWidget):
     def __init__(self, title, items, card_creator_func, on_view_all=None, custom_header_widget=None):
@@ -154,9 +136,10 @@ class SegmentedToggle(QWidget):
             self.toggled.emit(self.opt2)
 
 class HeroBanner(QWidget):
-    def __init__(self, movie, on_explore):
+    def __init__(self, movie, on_explore, on_status_change=None):
         super().__init__()
         self.movie = movie
+        self.on_status_change = on_status_change
         self.setObjectName("heroBanner")
         self.setFixedHeight(350)
         
@@ -173,15 +156,20 @@ class HeroBanner(QWidget):
         
         btn_layout = QHBoxLayout()
         explore_btn = QPushButton("▶ Explore Now")
-        explore_btn.setProperty("class", "primary-btn")
+        explore_btn.setStyleSheet("""
+            QPushButton { background-color: #1AE0A1; color: #0F172A; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; }
+            QPushButton:hover { background-color: #14B885; }
+        """)
         explore_btn.clicked.connect(lambda: on_explore(movie))
         
-        wishlist_btn = QPushButton("+ Add to Wishlist")
-        wishlist_btn.setStyleSheet("background: transparent; border: 1px solid #A0AEC0; color: #A0AEC0; padding: 10px 20px; border-radius: 6px;")
+        self.wishlist_btn = QPushButton()
+        self.wishlist_btn.clicked.connect(lambda checked=False: self.on_action_click())
         
         btn_layout.addWidget(explore_btn)
-        btn_layout.addWidget(wishlist_btn)
+        btn_layout.addWidget(self.wishlist_btn)
         btn_layout.addStretch()
+        
+        self.update_buttons()
         
         layout.addWidget(title)
         layout.addWidget(info)
@@ -189,6 +177,28 @@ class HeroBanner(QWidget):
         layout.addLayout(btn_layout)
         
         self.load_backdrop()
+
+    def on_action_click(self):
+        status = self.movie.get("status")
+        new_status = "remove" if status == "watch_later" else "watch_later"
+        if self.on_status_change:
+            self.on_status_change(self.movie, new_status)
+        self.update_buttons()
+
+    def update_buttons(self):
+        status = self.movie.get("status")
+        if status == "watch_later":
+            self.wishlist_btn.setText("✓ Wishlisted")
+            self.wishlist_btn.setStyleSheet("""
+                QPushButton { background: transparent; border: 1px solid #1AE0A1; color: #1AE0A1; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; }
+                QPushButton:hover { background: rgba(26, 224, 161, 0.1); }
+            """)
+        else:
+            self.wishlist_btn.setText("+ Add to Wishlist")
+            self.wishlist_btn.setStyleSheet("""
+                QPushButton { background: transparent; border: 1px solid #A0AEC0; color: #A0AEC0; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; }
+                QPushButton:hover { background: rgba(255,255,255,0.1); border-color: white; color: white; }
+            """)
 
     def paintEvent(self, event):
         from PySide6.QtGui import QColor, QPainter, QImage, QPixmap
@@ -232,7 +242,7 @@ class HeroBanner(QWidget):
                 QTimer.singleShot(1000, self.load_backdrop)
 
 class HeroCarousel(QWidget):
-    def __init__(self, movies, on_explore):
+    def __init__(self, movies, on_explore, on_status_change=None):
         super().__init__()
         self.movies = movies
         self.setFixedHeight(350)
@@ -247,7 +257,7 @@ class HeroCarousel(QWidget):
         self.slides = []
         movies_with_clone = movies + [movies[0]] if movies else []
         for m in movies_with_clone:
-            slide = HeroBanner(m, on_explore)
+            slide = HeroBanner(m, on_explore, on_status_change)
             self.inner_layout.addWidget(slide)
             self.slides.append(slide)
             

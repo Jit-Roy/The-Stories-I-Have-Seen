@@ -277,5 +277,5 @@ class MainWindow(QMainWindow):
         self.collection_page.load_lists()
         self.wishlist_page.load_lists()
         if self.stack.currentIndex() == 3:
-            # Refresh detail page if we are on it
-            self.detail_page.load_movie(movie_data)
+            # Refresh detail page buttons if we are on it
+            self.detail_page.update_buttons()

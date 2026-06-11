@@ -255,30 +255,32 @@ class SeriesFolderCard(QWidget):
         
         self.overlay = QWidget(self.poster_container)
         self.overlay.setFixedSize(160, 240)
-        self.overlay.setStyleSheet("background-color: rgba(0,0,0,0.65); border-radius: 12px;")
+        self.overlay.setStyleSheet("background-color: rgba(0,0,0,0.75); border-radius: 12px;")
         overlay_layout = QVBoxLayout(self.overlay)
-        overlay_layout.setAlignment(Qt.AlignCenter)
+        overlay_layout.setContentsMargins(10, 10, 10, 10)
         
         title_label = QLabel(series_name)
         title_label.setWordWrap(True)
         title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #E2E8F0; border: none; background: transparent;")
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #E2E8F0; border: none; background: transparent;")
         
         count_label = QLabel(f"{movie_count} movies")
         count_label.setAlignment(Qt.AlignCenter)
-        count_label.setStyleSheet("color: #1AE0A1; font-weight: bold; border: none; background: transparent;")
+        count_label.setStyleSheet("color: #1AE0A1; font-weight: bold; font-size: 13px; border: none; background: transparent;")
         
         open_btn = QPushButton("View Collection")
         open_btn.setStyleSheet("""
-            QPushButton { background-color: #1AE0A1; color: #0F172A; border-radius: 6px; padding: 10px 20px; font-weight: bold; }
-            QPushButton:hover { background-color: #14B885; }
+            QPushButton { background-color: transparent; color: #1AE0A1; border: 1.5px solid #1AE0A1; border-radius: 6px; padding: 8px 10px; font-weight: bold; font-size: 13px; }
+            QPushButton:hover { background-color: rgba(26, 224, 161, 0.1); }
         """)
         open_btn.clicked.connect(lambda: on_click(series_name))
         
+        overlay_layout.addStretch()
         overlay_layout.addWidget(title_label)
         overlay_layout.addWidget(count_label)
-        overlay_layout.addSpacing(20)
+        overlay_layout.addSpacing(15)
         overlay_layout.addWidget(open_btn)
+        overlay_layout.addStretch()
         
         layout.addWidget(self.poster_container)
         self.setLayout(layout)

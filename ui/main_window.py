@@ -12,7 +12,7 @@ from ui.pages.grid_page import GridPage
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("FrameVault")
+        self.setWindowTitle("The Stories I Carry")
         self.setMinimumSize(1200, 800)
         self.previous_page_index = 0
         
@@ -31,6 +31,7 @@ class MainWindow(QMainWindow):
         self.setup_top_nav()
         
         self.stack = QStackedWidget()
+        self.stack.currentChanged.connect(self._on_page_changed)
         
         self.home_page = HomePage(self.change_status, self.show_movie_detail, self.show_grid_view)
         self.collection_page = CollectionPage(self.change_status, self.show_movie_detail)
@@ -53,16 +54,37 @@ class MainWindow(QMainWindow):
 
     def setup_left_sidebar(self):
         self.left_sidebar = QWidget()
-        self.left_sidebar.setStyleSheet("background-color: #11131A; border-right: 1px solid #1E202B;")
-        self.left_sidebar.setFixedWidth(240)
+        self.left_sidebar.setObjectName("leftSidebar")
+        self.left_sidebar.setStyleSheet("#leftSidebar { background-color: #11131A; border-right: 1px solid #1E202B; }")
+        self.left_sidebar.setFixedWidth(255)
         layout = QVBoxLayout(self.left_sidebar)
         layout.setAlignment(Qt.AlignTop)
-        layout.setContentsMargins(20, 30, 20, 20)
+        # Reduced right margin to 10 to give the title text more room
+        layout.setContentsMargins(20, 30, 10, 20)
         
-        logo = QLabel("🎬 FrameVault\nYour Cinema Universe")
-        logo.setStyleSheet("font-size: 16px; font-weight: bold; color: white; border: none;")
-        layout.addWidget(logo)
+        logo_container = QWidget()
+        logo_layout = QHBoxLayout(logo_container)
+        logo_layout.setContentsMargins(0, 0, 0, 10)
+        logo_layout.setAlignment(Qt.AlignLeft)
+        
+        from PySide6.QtGui import QIcon
+        
+        logo_icon = QLabel()
+        logo_icon.setStyleSheet("background-color: transparent; border: none;")
+        logo_icon.setPixmap(QIcon("assets/icons/main_logo.svg").pixmap(36, 36))
+        
+        logo_text = QLabel("The Stories I Carry")
+        logo_text.setStyleSheet("font-size: 15px; font-weight: bold; color: white; background-color: transparent; border: none;")
+        
+        logo_layout.addWidget(logo_icon)
+        logo_layout.addSpacing(6)
+        logo_layout.addWidget(logo_text)
+        logo_layout.addStretch()
+        
+        layout.addWidget(logo_container)
         layout.addSpacing(30)
+        
+        from PySide6.QtGui import QIcon
         
         nav_style = """
             QPushButton {
@@ -78,20 +100,23 @@ class MainWindow(QMainWindow):
             }
         """
         
-        self.home_btn = QPushButton("🏠 Home")
+        self.home_btn = QPushButton("  Home")
+        self.home_btn.setIcon(QIcon("assets/icons/home.svg"))
         self.home_btn.setStyleSheet(nav_style)
         self.home_btn.setCheckable(True)
         self.home_btn.setChecked(True)
         self.home_btn.clicked.connect(lambda: self.switch_page(0, self.home_btn))
         layout.addWidget(self.home_btn)
         
-        self.col_btn = QPushButton("📚 Collection")
+        self.col_btn = QPushButton("  Collection")
+        self.col_btn.setIcon(QIcon("assets/icons/collection.svg"))
         self.col_btn.setStyleSheet(nav_style)
         self.col_btn.setCheckable(True)
         self.col_btn.clicked.connect(lambda: self.switch_page(1, self.col_btn))
         layout.addWidget(self.col_btn)
         
-        self.wish_btn = QPushButton("🔖 Wishlist")
+        self.wish_btn = QPushButton("  Wishlist")
+        self.wish_btn.setIcon(QIcon("assets/icons/wishlist.svg"))
         self.wish_btn.setStyleSheet(nav_style)
         self.wish_btn.setCheckable(True)
         self.wish_btn.clicked.connect(lambda: self.switch_page(2, self.wish_btn))
@@ -251,6 +276,16 @@ class MainWindow(QMainWindow):
             self.home_page.filter_bar.set_params(components.GLOBAL_FILTER_STATE)
             
         self.stack.setCurrentIndex(self.previous_page_index)
+
+    def _on_page_changed(self, index):
+        if hasattr(self, 'search_wrapper'):
+            if index == 0:
+                self.search_wrapper.setVisible(True)
+            elif index == 4:
+                # Only show search bar if GridPage is in 'Discover' mode (filter_bar is visible)
+                self.search_wrapper.setVisible(self.grid_page.filter_bar.isVisible())
+            else:
+                self.search_wrapper.setVisible(False)
 
     def change_status(self, movie_data, new_status):
         if new_status == "remove":

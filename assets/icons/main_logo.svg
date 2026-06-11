@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 512 512"
+     fill="none"
+     stroke="#1AE0A1"
+     stroke-width="12"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+  <!-- Top curve -->
+  <path d="M105 165
+           C180 155 310 170 390 120" />
+
+  <!-- Left side -->
+  <path d="M125 195
+           C145 195 145 195 150 240
+           L150 350
+           C145 370 135 375 120 380" />
+
+  <!-- Main reel frame -->
+  <path d="M160 195
+           C240 200 310 195 360 170
+           L375 320
+           C320 345 250 350 175 340
+           Z" />
+
+  <!-- Right side -->
+  <path d="M400 150
+           L385 180
+           L390 315
+           C400 330 410 320 430 300" />
+
+  <!-- Bottom curve -->
+  <path d="M105 405
+           C200 380 330 405 430 345" />
+
+  <!-- Play button -->
+  <path d="M250 235
+           L250 305
+           L305 270
+           Z" />
+
+</svg>

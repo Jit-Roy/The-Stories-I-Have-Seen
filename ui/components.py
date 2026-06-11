@@ -524,7 +524,7 @@ class DiscoverFilterBar(QWidget):
         BTN_TEXT   = "#061018"   # discover button text
 
         import os
-        svg_path = os.path.join(os.path.dirname(__file__), "down_arrow.svg").replace("\\", "/")
+        svg_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "down_arrow.svg").replace("\\", "/")
 
         # ── Shared combo style ─────────────────────────────────────────────────
         combo_style = f"""

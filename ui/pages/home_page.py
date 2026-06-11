@@ -72,7 +72,9 @@ class HomePage(QWidget):
             self.load_genres(genres)
         
         if trending:
-            banner = HeroBanner(trending[0], lambda m: self.on_movie_click(m))
+            from ui.components import HeroCarousel
+            # Take top 3 trending movies for the carousel
+            banner = HeroCarousel(trending[:3], lambda m: self.on_movie_click(m))
             self.content_layout.addWidget(banner)
             self.content_layout.addSpacing(30)
             
@@ -85,7 +87,7 @@ class HomePage(QWidget):
                 
             self.trending_carousel = HorizontalCarousel(
                 "Trending", 
-                trending[1:], 
+                trending, 
                 lambda m: MovieCard(m, self.change_status, self.on_movie_click), 
                 lambda: self.on_view_all(f"Trending {self.trending_toggle.current}", fetch_trending),
                 custom_header_widget=self.trending_toggle

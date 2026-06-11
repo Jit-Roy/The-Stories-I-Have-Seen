@@ -191,7 +191,7 @@ class HeroBanner(QWidget):
         self.load_backdrop()
 
     def paintEvent(self, event):
-        from PySide6.QtGui import QColor
+        from PySide6.QtGui import QColor, QPainter, QImage, QPixmap
         painter = QPainter(self)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
         
@@ -217,6 +217,7 @@ class HeroBanner(QWidget):
             QThreadPool.globalInstance().start(loader)
             
     def on_image_loaded(self, image_data):
+        from PySide6.QtGui import QImage, QPixmap
         if image_data:
             img = QImage()
             if img.loadFromData(image_data):
@@ -229,6 +230,95 @@ class HeroBanner(QWidget):
                 self.image_retries -= 1
                 from PySide6.QtCore import QTimer
                 QTimer.singleShot(1000, self.load_backdrop)
+
+class HeroCarousel(QWidget):
+    def __init__(self, movies, on_explore):
+        super().__init__()
+        self.movies = movies
+        self.setFixedHeight(350)
+        self.current_idx = 0
+        
+        # Inner sliding container
+        self.inner = QWidget(self)
+        self.inner_layout = QHBoxLayout(self.inner)
+        self.inner_layout.setContentsMargins(0, 0, 0, 0)
+        self.inner_layout.setSpacing(0)
+        
+        self.slides = []
+        movies_with_clone = movies + [movies[0]] if movies else []
+        for m in movies_with_clone:
+            slide = HeroBanner(m, on_explore)
+            self.inner_layout.addWidget(slide)
+            self.slides.append(slide)
+            
+        # Main layout for overlaying dots
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 20)
+        main_layout.addStretch()
+        
+        # Dots
+        self.dots_layout = QHBoxLayout()
+        self.dots_layout.setAlignment(Qt.AlignCenter)
+        self.dots_layout.setSpacing(10)
+        
+        self.dots = []
+        for i in range(len(movies)):
+            dot = QPushButton()
+            dot.setFixedSize(12, 12)
+            dot.setCursor(Qt.PointingHandCursor)
+            dot.clicked.connect(lambda checked=False, idx=i: self.slide_to(idx, restart_timer=True))
+            self.dots_layout.addWidget(dot)
+            self.dots.append(dot)
+            
+        self.update_dots()
+        main_layout.addLayout(self.dots_layout)
+        
+        from PySide6.QtCore import QPropertyAnimation, QEasingCurve, QTimer
+        self.anim = QPropertyAnimation(self.inner, b"pos")
+        self.anim.setDuration(600)
+        self.anim.setEasingCurve(QEasingCurve.InOutQuad)
+        self.anim.finished.connect(self._on_anim_finished)
+        
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.next_slide)
+        self.timer.start(6000)
+        
+    def _on_anim_finished(self):
+        if self.current_idx == len(self.movies):
+            # We reached the cloned slide at the end, snap back instantly to index 0
+            self.current_idx = 0
+            self.inner.move(-self.width() * 0, 0)
+        
+    def update_dots(self):
+        real_idx = self.current_idx % len(self.movies) if self.movies else 0
+        for i, dot in enumerate(self.dots):
+            if i == real_idx:
+                dot.setStyleSheet("background-color: #1AE0A1; border-radius: 6px; border: none;")
+            else:
+                dot.setStyleSheet("background-color: #4A5568; border-radius: 6px; border: none;")
+                
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if not self.movies: return
+        self.inner.resize(self.width() * (len(self.movies) + 1), self.height())
+        for slide in self.slides:
+            slide.setFixedSize(self.width(), self.height())
+        self.inner.move(-self.width() * self.current_idx, 0)
+        
+    def next_slide(self):
+        if not self.movies: return
+        # Advance by 1, allowing it to hit the cloned slide at len(self.movies)
+        target_idx = self.current_idx + 1
+        self.slide_to(target_idx, restart_timer=False)
+        
+    def slide_to(self, idx, restart_timer=False):
+        self.current_idx = idx
+        self.update_dots()
+        from PySide6.QtCore import QPoint
+        self.anim.setEndValue(QPoint(-self.width() * self.current_idx, 0))
+        self.anim.start()
+        if restart_timer:
+            self.timer.start(6000)
 
 from PySide6.QtWidgets import QGridLayout
 

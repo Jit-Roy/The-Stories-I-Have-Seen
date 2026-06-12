@@ -14,7 +14,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("The Stories I Carry")
         self.setMinimumSize(1200, 800)
-        self.previous_page_index = 0
+        self.page_history = []
         
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -136,7 +136,7 @@ class MainWindow(QMainWindow):
 
     def switch_page(self, index, active_btn):
         self.stack.setCurrentIndex(index)
-        self.previous_page_index = index
+        self.page_history.clear()
         self.home_btn.setChecked(False)
         self.col_btn.setChecked(False)
         self.wish_btn.setChecked(False)
@@ -150,12 +150,12 @@ class MainWindow(QMainWindow):
             self.home_page.filter_bar.set_params(components.GLOBAL_FILTER_STATE)
 
     def show_movie_detail(self, movie_data):
-        self.previous_page_index = self.stack.currentIndex()
+        self.page_history.append(self.stack.currentIndex())
         self.detail_page.load_movie(movie_data)
         self.stack.setCurrentIndex(3)
         
     def show_grid_view(self, title, fetch_func, initial_params=None):
-        self.previous_page_index = self.stack.currentIndex()
+        self.page_history.append(self.stack.currentIndex())
         self.grid_page.load_grid(title, fetch_func, initial_params)
         self.stack.setCurrentIndex(4)
 
@@ -275,16 +275,29 @@ class MainWindow(QMainWindow):
             self.home_page.filter_bar._apply()
 
     def go_back_to_previous_page(self):
-        # We don't want to go back to detail or grid if we are escaping it
-        if self.previous_page_index in [3, 4]:
-            self.previous_page_index = 0
+        if not self.page_history:
             self.home_btn.setChecked(True)
+            self.stack.setCurrentIndex(0)
+            return
             
-        if self.previous_page_index == 0:
+        prev_index = self.page_history.pop()
+        
+        self.home_btn.setChecked(False)
+        self.col_btn.setChecked(False)
+        self.wish_btn.setChecked(False)
+        
+        if prev_index == 0:
+            self.home_btn.setChecked(True)
             import ui.components as components
             self.home_page.filter_bar.set_params(components.GLOBAL_FILTER_STATE)
+        elif prev_index == 1:
+            self.col_btn.setChecked(True)
+            self.collection_page.load_lists()
+        elif prev_index == 2:
+            self.wish_btn.setChecked(True)
+            self.wishlist_page.load_lists()
             
-        self.stack.setCurrentIndex(self.previous_page_index)
+        self.stack.setCurrentIndex(prev_index)
 
     def _on_page_changed(self, index):
         if hasattr(self, 'search_wrapper'):

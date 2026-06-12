@@ -314,9 +314,9 @@ class MovieDetailPage(QWidget):
 
         self._last_details = details
 
-        # Sync movie_data with freshly fetched status from TMDB
-        if "status" in details:
-            self.movie_data["status"] = details["status"]
+        # Re-inject fresh DB status (details cache may have been stale)
+        import tmdb_api
+        tmdb_api.inject_db_status([self.movie_data])
 
         date = details.get("release_date", "")[:4]
         runtime = details.get("runtime", 0)

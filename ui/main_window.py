@@ -193,6 +193,8 @@ class MainWindow(QMainWindow):
         current_index = self.stack.currentIndex()
         state = self.detail_page.movie_data if current_index == 3 else None
         self.page_history.append((current_index, state))
+        # Inject fresh DB status so buttons are correct from the very first render
+        tmdb_api.inject_db_status([movie_data])
         self.detail_page.load_movie(movie_data)
         self.stack.setCurrentIndex(3)
 

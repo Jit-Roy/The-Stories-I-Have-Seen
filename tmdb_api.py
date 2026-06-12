@@ -30,6 +30,8 @@ def invalidate_db_cache():
     """Call this whenever the database is written to."""
     global _db_status_cache
     _db_status_cache = None
+    # Also clear the details cache so stale statuses are not served
+    _details_cache.clear()
 
 
 def _make_request(endpoint, params=None, retries=3):

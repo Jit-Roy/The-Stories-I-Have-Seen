@@ -8,7 +8,20 @@ def main():
     # Initialize the database
     database.init_db()
     
+    import ctypes
+    from PySide6.QtGui import QIcon
+    
+    # Set AppUserModelID so Windows taskbar correctly groups and uses the custom icon
+    myappid = 'jitroy.thestoriesihaveseen.app.1.0'
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception:
+        pass
+
     app = QApplication(sys.argv)
+    
+    # Set the runtime window icon
+    app.setWindowIcon(QIcon("assets/icons/main_logo.ico"))
     
     # Base global styles
     app.setStyleSheet("""

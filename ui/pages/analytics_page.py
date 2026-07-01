@@ -330,6 +330,23 @@ class AnalyticsPage(QWidget):
         self._build_horizontal_card(
             charts_layout, 3, 0, "Top Countries", countries, "#FF0099", "#493240"
         )
+        
+        # 9. Release Decade Breakdown
+        decades = {}
+        for m in watched:
+            release_date = m.get("release_date")
+            if release_date and len(release_date) >= 4:
+                try:
+                    year = int(release_date[:4])
+                    decade = year - (year % 10)
+                    decade_str = f"{decade}s"
+                    decades[decade_str] = decades.get(decade_str, 0) + 1
+                except ValueError:
+                    pass
+                    
+        self._build_horizontal_card(
+            charts_layout, 3, 1, "Time Traveler (Decades)", decades, "#F5AF19", "#F12711"
+        )
 
     def _build_horizontal_card(self, grid, row, col, title, data_dict, grad_start, grad_end):
         top_items = sorted(data_dict.items(), key=lambda x: x[1], reverse=True)[:10]
@@ -373,6 +390,7 @@ class AnalyticsPage(QWidget):
 
     def create_card(self, title_text):
         card = QFrame()
+        card.setFixedHeight(480)  # Fixed height for all cards
         card.setStyleSheet("""
             QFrame {
                 background: transparent;
@@ -388,13 +406,41 @@ class AnalyticsPage(QWidget):
         title.setStyleSheet("color: #FFFFFF; font-size: 17px; font-weight: 700; background: transparent; border: none;")
         wrapper.addWidget(title)
         
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                background: transparent; 
+                border: none;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #11131A;
+                width: 6px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: #2A2D3E;
+                min-height: 20px;
+                border-radius: 3px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+            }
+        """)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
         content = QWidget()
         content.setStyleSheet("background: transparent; border: none;")
-        wrapper.addWidget(content)
+        scroll.setWidget(content)
+        
+        wrapper.addWidget(scroll)
         
         # Use content as the parent for the returned layout
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 10, 0) # Right margin for scrollbar
+        layout.setAlignment(Qt.AlignTop)
         
         return card, layout
 

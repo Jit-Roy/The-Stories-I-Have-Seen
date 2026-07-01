@@ -74,15 +74,39 @@ class WishlistPage(QWidget):
             else:
                 standalone.append(m)
                 
+        self.pending_items = []
         if self.current_series:
             for m in series_groups.get(self.current_series, []):
-                self.flow.add_widget(MovieCard(m, self.change_status, self.on_movie_click))
+                self.pending_items.append(("movie", m))
         else:
             for s_name, s_movies in series_groups.items():
-                folder = SeriesFolderCard(s_name, len(s_movies), self.set_series_view)
-                self.flow.add_widget(folder)
+                self.pending_items.append(("folder", (s_name, len(s_movies))))
             for m in standalone:
-                self.flow.add_widget(MovieCard(m, self.change_status, self.on_movie_click))
+                self.pending_items.append(("movie", m))
+                
+        from PySide6.QtCore import QTimer
+        if hasattr(self, "render_timer") and self.render_timer.isActive():
+            self.render_timer.stop()
+            
+        self.render_timer = QTimer(self)
+        self.render_timer.timeout.connect(self._render_chunk)
+        self.render_timer.start(5)
+        
+    def _render_chunk(self):
+        if not hasattr(self, "pending_items") or not self.pending_items:
+            if hasattr(self, "render_timer"):
+                self.render_timer.stop()
+            self.flow.reflow(self.scroll.viewport().width() if self.scroll.viewport() else None)
+            return
+            
+        chunk = self.pending_items[:15]
+        self.pending_items = self.pending_items[15:]
+        
+        for item_type, data in chunk:
+            if item_type == "movie":
+                self.flow.add_widget(MovieCard(data, self.change_status, self.on_movie_click))
+            elif item_type == "folder":
+                self.flow.add_widget(SeriesFolderCard(data[0], data[1], self.set_series_view))
                 
         self.flow.reflow(self.scroll.viewport().width() if self.scroll.viewport() else None)
 

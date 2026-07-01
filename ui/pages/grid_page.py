@@ -72,6 +72,8 @@ class GridPage(QWidget):
         if initial_params is not None:
             import tmdb_api
             self.filter_bar.populate_genres(tmdb_api.get_genres())
+            self.filter_bar.populate_languages(tmdb_api.get_languages())
+            self.filter_bar.populate_countries(tmdb_api.get_countries())
             self.filter_bar.set_params(initial_params)
             self.filter_bar.show()
         else:
@@ -110,3 +112,22 @@ class GridPage(QWidget):
         
         if len(movies) < 20:
             self.load_more_btn.hide()
+
+    def refresh_status(self):
+        # Update UI of all MovieCards in the grid to reflect fresh DB status
+        import tmdb_api
+        from ui.movie_card import MovieCard
+        
+        # We need to fetch the latest db status
+        db_cache = tmdb_api._get_db_status_map()
+        
+        # Iterate over widgets in flow_layout
+        for i in range(self.flow_layout.count()):
+            item = self.flow_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, MovieCard):
+                    # Inject the latest status
+                    movie_id = widget.movie_data.get("id")
+                    widget.movie_data["status"] = db_cache.get(movie_id)
+                    widget.update_buttons()

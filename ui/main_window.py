@@ -8,6 +8,7 @@ from ui.pages.collection_page import CollectionPage
 from ui.pages.wishlist_page import WishlistPage
 from ui.pages.detail_page import MovieDetailPage
 from ui.pages.grid_page import GridPage
+from ui.pages.analytics_page import AnalyticsPage
 
 
 # ---------------------------------------------------------------------------
@@ -31,10 +32,12 @@ class _StatusWorker(QRunnable):
             series_name = details.get("series_name") if details else None
             vote_average = details.get("vote_average") if details else self.movie_data.get("vote_average")
             release_date = details.get("release_date") if details else self.movie_data.get("release_date")
+            prod_countries = details.get("production_countries") if details else None
         except Exception:
             series_name = None
             vote_average = self.movie_data.get("vote_average")
             release_date = self.movie_data.get("release_date")
+            prod_countries = None
 
         database.add_movie(
             self.movie_data["id"],
@@ -44,6 +47,13 @@ class _StatusWorker(QRunnable):
             series_name,
             vote_average,
             release_date,
+            runtime=details.get("runtime") if details else None,
+            genres=details.get("genres") if details else None,
+            director=details.get("director") if details else None,
+            cast=details.get("cast") if details else None,
+            production_companies=details.get("production_companies") if details else None,
+            original_language=details.get("original_language") if details else None,
+            production_countries=prod_countries
         )
         tmdb_api.invalidate_db_cache()
         self.signals.finished.emit(self.movie_data, self.new_status)
@@ -78,12 +88,14 @@ class MainWindow(QMainWindow):
         self.wishlist_page = WishlistPage(self.change_status, self.show_movie_detail)
         self.detail_page = MovieDetailPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail)
         self.grid_page = GridPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail)
+        self.analytics_page = AnalyticsPage(self.show_grid_view)
 
         self.stack.addWidget(self.home_page)       # 0
         self.stack.addWidget(self.collection_page) # 1
         self.stack.addWidget(self.wishlist_page)   # 2
         self.stack.addWidget(self.detail_page)     # 3
         self.stack.addWidget(self.grid_page)       # 4
+        self.stack.addWidget(self.analytics_page)  # 5
 
         self.center_layout.addWidget(self.stack)
         self.layout.addWidget(self.center_area, 1)
@@ -91,6 +103,10 @@ class MainWindow(QMainWindow):
         # Load initial data for lists
         self.collection_page.load_lists()
         self.wishlist_page.load_lists()
+        
+        self.collection_dirty = False
+        self.wishlist_dirty = False
+        self.analytics_dirty = False
 
     def setup_left_sidebar(self):
         self.left_sidebar = QWidget()
@@ -158,9 +174,16 @@ class MainWindow(QMainWindow):
         self.wish_btn.clicked.connect(lambda: self.switch_page(2, self.wish_btn))
         layout.addWidget(self.wish_btn)
 
+        self.analytics_btn = QPushButton("  Analytics")
+        self.analytics_btn.setStyleSheet(nav_style)
+        self.analytics_btn.setCheckable(True)
+        self.analytics_btn.clicked.connect(lambda: self.switch_page(5, self.analytics_btn))
+        layout.addWidget(self.analytics_btn)
+
         self.home_btn.toggled.connect(self.update_nav_icons)
         self.col_btn.toggled.connect(self.update_nav_icons)
         self.wish_btn.toggled.connect(self.update_nav_icons)
+        self.analytics_btn.toggled.connect(self.update_nav_icons)
 
         self.home_btn.setChecked(True)
         self.update_nav_icons()
@@ -173,6 +196,7 @@ class MainWindow(QMainWindow):
         self.home_btn.setIcon(QIcon("assets/icons/home_active.svg" if self.home_btn.isChecked() else "assets/icons/home.svg"))
         self.col_btn.setIcon(QIcon("assets/icons/collection_active.svg" if self.col_btn.isChecked() else "assets/icons/collection.svg"))
         self.wish_btn.setIcon(QIcon("assets/icons/wishlist_active.svg" if self.wish_btn.isChecked() else "assets/icons/wishlist.svg"))
+        self.analytics_btn.setIcon(QIcon("assets/icons/analytics_active.svg" if self.analytics_btn.isChecked() else "assets/icons/analytics.svg"))
 
     def switch_page(self, index, active_btn):
         self.stack.setCurrentIndex(index)
@@ -180,11 +204,14 @@ class MainWindow(QMainWindow):
         self.home_btn.setChecked(False)
         self.col_btn.setChecked(False)
         self.wish_btn.setChecked(False)
+        self.analytics_btn.setChecked(False)
         active_btn.setChecked(True)
         if index == 1:
             self.collection_page.load_lists()
         elif index == 2:
             self.wishlist_page.load_lists()
+        elif index == 5:
+            self.analytics_page.load_data()
         elif index == 0:
             import ui.components as components
             self.home_page.filter_bar.set_params(components.GLOBAL_FILTER_STATE)
@@ -198,10 +225,58 @@ class MainWindow(QMainWindow):
         self.detail_page.load_movie(movie_data)
         self.stack.setCurrentIndex(3)
 
+    def show_analytics_discovery(self, category, value):
+        import tmdb_api
+        params = {"sort_by": "popularity.desc"}
+        title = f"Discover: {value}"
+        
+        if category == "Studio Loyalty":
+            data = tmdb_api._make_request("/search/company", {"query": value, "page": 1})
+            results = data.get("results", [])
+            if results:
+                params["with_companies"] = results[0]["id"]
+            else:
+                return # Not found
+        elif category == "Cinematic World Map":
+            params["with_original_language"] = value
+        elif category == "Top Countries":
+            params["with_origin_country"] = value
+        elif category == "Rating Distribution":
+            params["vote_average.gte"] = value
+            params["vote_average.lte"] = str(float(value) + 0.99)
+        elif category == "Favorite Actors":
+            data = tmdb_api._make_request("/search/person", {"query": value, "page": 1})
+            results = data.get("results", [])
+            if results:
+                params["with_cast"] = results[0]["id"]
+            else:
+                return
+        elif category == "Top Directors":
+            data = tmdb_api._make_request("/search/person", {"query": value, "page": 1})
+            results = data.get("results", [])
+            if results:
+                params["with_crew"] = results[0]["id"]
+            else:
+                return
+        elif category == "Top Genres":
+            all_genres = tmdb_api.get_genres()
+            genre_id = next((g["id"] for g in all_genres if g["name"].lower() == value.lower()), None)
+            if genre_id:
+                params["with_genres"] = genre_id
+            else:
+                return
+            
+        fetch_func = lambda page=1: tmdb_api.advanced_discover(params, page=page)
+        self.show_grid_view(title, fetch_func, initial_params=params)
+
     def show_grid_view(self, title, fetch_func, initial_params=None):
         current_index = self.stack.currentIndex()
         state = self.detail_page.movie_data if current_index == 3 else None
         self.page_history.append((current_index, state))
+        
+        # Track if this grid view was triggered by a text search
+        self.is_text_search = initial_params is not None and "query" in initial_params
+        
         self.grid_page.load_grid(title, fetch_func, initial_params)
         self.stack.setCurrentIndex(4)
 
@@ -350,10 +425,21 @@ class MainWindow(QMainWindow):
             if index == 0:
                 self.search_wrapper.setVisible(True)
             elif index == 4:
-                # Only show search bar if GridPage is in 'Discover' mode (filter_bar is visible)
-                self.search_wrapper.setVisible(self.grid_page.filter_bar.isVisible())
+                # Only show search bar if GridPage is in 'Discover' mode and it was a text search
+                is_text = getattr(self, "is_text_search", False)
+                self.search_wrapper.setVisible(is_text and self.grid_page.filter_bar.isVisible())
             else:
                 self.search_wrapper.setVisible(False)
+                
+        if index == 1 and getattr(self, "collection_dirty", False):
+            self.collection_page.load_lists()
+            self.collection_dirty = False
+        elif index == 2 and getattr(self, "wishlist_dirty", False):
+            self.wishlist_page.load_lists()
+            self.wishlist_dirty = False
+        elif index == 5 and getattr(self, "analytics_dirty", False):
+            self.analytics_page.load_data()
+            self.analytics_dirty = False
 
     # ------------------------------------------------------------------
     # change_status — non-blocking; uses cached details when available
@@ -390,6 +476,13 @@ class MainWindow(QMainWindow):
                 cached_details.get("series_name"),
                 cached_details.get("vote_average") or movie_data.get("vote_average"),
                 cached_details.get("release_date") or movie_data.get("release_date"),
+                runtime=cached_details.get("runtime"),
+                genres=cached_details.get("genres"),
+                director=cached_details.get("director"),
+                cast=cached_details.get("cast"),
+                production_companies=cached_details.get("production_companies"),
+                original_language=cached_details.get("original_language"),
+                production_countries=cached_details.get("production_countries")
             )
             tmdb_api.invalidate_db_cache()
             self._post_status_update(movie_data, new_status)
@@ -401,10 +494,30 @@ class MainWindow(QMainWindow):
 
     def _post_status_update(self, movie_data, new_status):
         """Refresh dependent views after a status change."""
-        self.collection_page.load_lists()
-        self.wishlist_page.load_lists()
+        self.collection_dirty = True
+        self.wishlist_dirty = True
+        self.analytics_dirty = True
+        
+        current_idx = self.stack.currentIndex()
+        if current_idx == 1:
+            self.collection_page.load_lists()
+            self.collection_dirty = False
+        elif current_idx == 2:
+            self.wishlist_page.load_lists()
+            self.wishlist_dirty = False
+        elif current_idx == 5:
+            self.analytics_page.load_data()
+            self.analytics_dirty = False
+            
         if self.stack.currentIndex() == 3:
             self.detail_page.update_buttons()
+            
+        # Refresh grid page movie cards if any are displaying this movie
+        if hasattr(self, "grid_page"):
+            self.grid_page.refresh_status()
+            
         # Keep the hero banner buttons in sync no matter where the change came from
-        if hasattr(self.home_page, "hero_carousel") and self.home_page.hero_carousel is not None:
-            self.home_page.hero_carousel.refresh_status()
+        if hasattr(self, "home_page"):
+            if hasattr(self.home_page, "hero_carousel") and self.home_page.hero_carousel is not None:
+                self.home_page.hero_carousel.refresh_status()
+            self.home_page.refresh_carousels()

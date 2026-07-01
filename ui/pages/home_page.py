@@ -126,6 +126,8 @@ class HomePage(QWidget):
             ("upcoming",  tmdb_api.get_upcoming),
             ("top_rated", tmdb_api.get_top_rated),
             ("genres",    tmdb_api.get_genres),
+            ("languages", tmdb_api.get_languages),
+            ("countries", tmdb_api.get_countries),
         ]
         self._sections_pending = len(sections)
 
@@ -140,7 +142,15 @@ class HomePage(QWidget):
 
         if key == "genres":
             if data:
-                self.load_genres(data)
+                self.filter_bar.populate_genres(data)
+            return
+        elif key == "languages":
+            if data:
+                self.filter_bar.populate_languages(data)
+            return
+        elif key == "countries":
+            if data:
+                self.filter_bar.populate_countries(data)
             return
 
         if not data:
@@ -205,19 +215,27 @@ class HomePage(QWidget):
         self._swap_placeholder("hero", container)
 
     def _build_top_rated(self, top_rated):
-        carousel = HorizontalCarousel(
+        self.top_rated_carousel = HorizontalCarousel(
             "Top Rated",
             top_rated,
             lambda m: MovieCard(m, self.change_status, self.on_movie_click),
             lambda: self.on_view_all("Top Rated", tmdb_api.get_top_rated),
         )
-        self._swap_placeholder("top_rated", carousel)
+        self._swap_placeholder("top_rated", self.top_rated_carousel)
 
     def _build_upcoming(self, upcoming):
-        carousel = HorizontalCarousel(
+        self.upcoming_carousel = HorizontalCarousel(
             "Upcoming Releases",
             upcoming,
             lambda m: MovieCard(m, self.change_status, self.on_movie_click),
             lambda: self.on_view_all("Upcoming Releases", tmdb_api.get_upcoming),
         )
-        self._swap_placeholder("upcoming", carousel)
+        self._swap_placeholder("upcoming", self.upcoming_carousel)
+
+    def refresh_carousels(self):
+        # Refresh the status of movie cards in all home page carousels
+        for carousel_name in ["trending_carousel", "top_rated_carousel", "upcoming_carousel"]:
+            if hasattr(self, carousel_name):
+                carousel = getattr(self, carousel_name)
+                if carousel and hasattr(carousel, "refresh_status"):
+                    carousel.refresh_status()

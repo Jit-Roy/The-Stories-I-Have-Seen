@@ -131,6 +131,7 @@ def get_movie_details(movie_id):
     movie["original_language"] = data.get("original_language", "").upper()
     movie["homepage"] = data.get("homepage", "")
     movie["production_companies"] = [c["name"] for c in data.get("production_companies", [])]
+    movie["production_countries"] = [c["iso_3166_1"] for c in data.get("production_countries", [])]
 
     credits = data.get("credits", {})
     crew = credits.get("crew", [])
@@ -152,9 +153,26 @@ def get_movie_details(movie_id):
     return result
 
 
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
 def get_genres():
     data = _make_request("/genre/movie/list", {"language": "en-US"})
     return data.get("genres", [])
+
+@lru_cache(maxsize=1)
+def get_languages():
+    data = _make_request("/configuration/languages")
+    if data and isinstance(data, list):
+        return sorted(data, key=lambda x: x.get("english_name", ""))
+    return []
+
+@lru_cache(maxsize=1)
+def get_countries():
+    data = _make_request("/configuration/countries")
+    if data and isinstance(data, list):
+        return sorted(data, key=lambda x: x.get("english_name", ""))
+    return []
 
 
 def get_movies_by_genre(genre_id, page=1):
@@ -285,3 +303,68 @@ def advanced_discover(params, page=1):
     _search_cache[cursor_key] = tmdb_page
 
     return collected[:PAGE_SIZE]
+# ---------------------------------------------------------------------------
+# Discovery for Analytics
+# ---------------------------------------------------------------------------
+def discover_by_person(name, is_director=False, page=1):
+    search = _make_request("/search/person", {"query": name})
+    if not search or not search.get("results"):
+        return []
+    person_id = search["results"][0]["id"]
+    
+    params = {"sort_by": "popularity.desc", "page": page}
+    if is_director:
+        params["with_crew"] = person_id
+    else:
+        params["with_cast"] = person_id
+        
+    res = _make_request("/discover/movie", params)
+    movies = res.get("results", []) if res else []
+    return inject_db_status([_format_movie(m) for m in movies])
+
+def discover_by_studio(name, page=1):
+    search = _make_request("/search/company", {"query": name})
+    if not search or not search.get("results"):
+        return []
+    company_id = search["results"][0]["id"]
+    
+    res = _make_request("/discover/movie", {"with_companies": company_id, "sort_by": "popularity.desc", "page": page})
+    movies = res.get("results", []) if res else []
+    return inject_db_status([_format_movie(m) for m in movies])
+
+def discover_by_language(lang_code, page=1):
+    res = _make_request("/discover/movie", {"with_original_language": lang_code.lower(), "sort_by": "popularity.desc", "page": page})
+    movies = res.get("results", []) if res else []
+    return inject_db_status([_format_movie(m) for m in movies])
+
+def discover_by_era(decade_str, page=1):
+    # decade_str is something like "2010s"
+    try:
+        start_year = int(decade_str[:4])
+        end_year = start_year + 9
+        res = _make_request("/discover/movie", {
+            "primary_release_date.gte": f"{start_year}-01-01",
+            "primary_release_date.lte": f"{end_year}-12-31",
+            "sort_by": "popularity.desc",
+            "page": page
+        })
+        movies = res.get("results", []) if res else []
+        return inject_db_status([_format_movie(m) for m in movies])
+    except:
+        return []
+        
+def discover_by_genre(genre_name, page=1):
+    # Fetch genres list to map name to ID
+    genres_data = get_genres()
+    genre_id = None
+    for g in genres_data:
+        if g["name"].lower() == genre_name.lower():
+            genre_id = g["id"]
+            break
+            
+    if not genre_id:
+        return []
+        
+    res = _make_request("/discover/movie", {"with_genres": genre_id, "sort_by": "popularity.desc", "page": page})
+    movies = res.get("results", []) if res else []
+    return inject_db_status([_format_movie(m) for m in movies])

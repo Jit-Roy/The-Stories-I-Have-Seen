@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import json
 
 DB_NAME = "movies.db"
 
@@ -36,19 +37,58 @@ def init_db():
     except sqlite3.OperationalError:
         pass
         
-    
+    try:
+        cursor.execute('ALTER TABLE movies ADD COLUMN runtime INTEGER')
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute('ALTER TABLE movies ADD COLUMN genres TEXT')
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute('ALTER TABLE movies ADD COLUMN director TEXT')
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute('ALTER TABLE movies ADD COLUMN "cast" TEXT')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute('ALTER TABLE movies ADD COLUMN production_companies TEXT')
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute('ALTER TABLE movies ADD COLUMN original_language TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute('ALTER TABLE movies ADD COLUMN production_countries TEXT')
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
     conn.close()
 
-def add_movie(tmdb_id, title, poster_path, status, series_name=None, vote_average=None, release_date=None):
+def add_movie(tmdb_id, title, poster_path, status, series_name=None, vote_average=None, release_date=None, runtime=None, genres=None, director=None, cast=None, production_companies=None, original_language=None, production_countries=None):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
     try:
+        # Serialize list fields to JSON
+        genres_json = json.dumps(genres) if genres else None
+        cast_json = json.dumps(cast) if cast else None
+        companies_json = json.dumps(production_companies) if production_companies else None
+        countries_json = json.dumps(production_countries) if production_countries else None
+        
         cursor.execute('''
-            INSERT INTO movies (tmdb_id, title, poster_path, status, series_name, vote_average, release_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (tmdb_id, title, poster_path, status, series_name, vote_average, release_date))
+            INSERT INTO movies (tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres, director, "cast", production_companies, original_language, production_countries)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres_json, director, cast_json, companies_json, original_language, countries_json))
         conn.commit()
         success = True
     except sqlite3.IntegrityError:
@@ -78,9 +118,9 @@ def get_movies(status=None):
     cursor = conn.cursor()
     
     if status:
-        cursor.execute('SELECT tmdb_id, title, poster_path, status, series_name, vote_average, release_date FROM movies WHERE status = ? ORDER BY added_at DESC', (status,))
+        cursor.execute('SELECT tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres, director, "cast", production_companies, original_language, production_countries FROM movies WHERE status = ? ORDER BY added_at DESC', (status,))
     else:
-        cursor.execute('SELECT tmdb_id, title, poster_path, status, series_name, vote_average, release_date FROM movies ORDER BY added_at DESC')
+        cursor.execute('SELECT tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres, director, "cast", production_companies, original_language, production_countries FROM movies ORDER BY added_at DESC')
         
     movies = cursor.fetchall()
     conn.close()
@@ -94,7 +134,14 @@ def get_movies(status=None):
             "status": m[3],
             "series_name": m[4],
             "vote_average": m[5],
-            "release_date": m[6]
+            "release_date": m[6],
+            "runtime": m[7],
+            "genres": json.loads(m[8]) if m[8] else [],
+            "director": m[9],
+            "cast": json.loads(m[10]) if m[10] else [],
+            "production_companies": json.loads(m[11]) if m[11] else [],
+            "original_language": m[12],
+            "production_countries": json.loads(m[13]) if m[13] else []
         }
         for m in movies
     ]

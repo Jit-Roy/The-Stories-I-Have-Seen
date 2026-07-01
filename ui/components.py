@@ -63,6 +63,20 @@ class HorizontalCarousel(QWidget):
         for item in items:
             self.h_layout.addWidget(self.card_creator_func(item))
 
+    def refresh_status(self):
+        import tmdb_api
+        from ui.movie_card import MovieCard
+        db_cache = tmdb_api._get_db_status_map()
+        
+        for i in range(self.h_layout.count()):
+            item = self.h_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, MovieCard):
+                    movie_id = widget.movie_data.get("id")
+                    widget.movie_data["status"] = db_cache.get(movie_id)
+                    widget.update_buttons()
+
 class SegmentedToggle(QWidget):
     toggled = Signal(str)
     
@@ -221,10 +235,20 @@ class HeroBanner(QWidget):
         super().paintEvent(event)
         
     def load_backdrop(self):
-        if self.movie.get("backdrop_path"):
-            loader = ImageLoader(self.movie["backdrop_path"])
-            loader.signals.finished.connect(self.on_image_loaded)
-            QThreadPool.globalInstance().start(loader)
+        url = self.movie.get("backdrop_path")
+        if not url:
+            return
+            
+        # Fast path: serve from cache synchronously
+        from ui.movie_card import ImageLoader
+        cached = ImageLoader.get_cached_image(url)
+        if cached:
+            self.on_image_loaded(cached)
+            return
+            
+        loader = ImageLoader(url)
+        loader.signals.finished.connect(self.on_image_loaded)
+        QThreadPool.globalInstance().start(loader)
             
     def on_image_loaded(self, image_data):
         from PySide6.QtGui import QImage, QPixmap
@@ -428,9 +452,114 @@ class FilterComboBox(QComboBox):
     def minimumSizeHint(self):
         return self.sizeHint()
         
+class SearchableComboBox(FilterComboBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setEditable(False)
+        from PySide6.QtWidgets import QMenu, QWidgetAction, QLineEdit, QListWidget, QWidget, QVBoxLayout
+        from PySide6.QtCore import Qt
+        
+        self.search_menu = QMenu(self)
+        self.search_menu.setStyleSheet("""
+            QMenu {
+                background-color: #0F121A;
+                border: 1px solid #1E2840;
+                border-radius: 10px;
+                padding: 4px;
+            }
+        """)
+        
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Search...")
+        self.search_edit.setStyleSheet("""
+            QLineEdit {
+                background-color: #141720;
+                color: #C4D0E0;
+                border: 1px solid #242D42;
+                border-radius: 6px;
+                padding: 6px;
+                margin: 4px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #374D6B;
+            }
+        """)
+        
+        self.list_widget = QListWidget()
+        self.list_widget.setStyleSheet("""
+            QListWidget {
+                background-color: transparent;
+                color: #C4D0E0;
+                border: none;
+                outline: 0;
+            }
+            QListWidget::item {
+                min-height: 34px;
+                padding-left: 12px;
+                border-radius: 6px;
+            }
+            QListWidget::item:hover {
+                background-color: #1C2030;
+                color: #DCE8F4;
+            }
+            QListWidget::item:selected {
+                background-color: #1AE0A1;
+                color: #07111E;
+            }
+        """)
+        self.list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.list_widget.setFixedHeight(250)
+        
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.search_edit)
+        layout.addWidget(self.list_widget)
+        
+        action = QWidgetAction(self)
+        action.setDefaultWidget(container)
+        self.search_menu.addAction(action)
+        
+        self.search_edit.textChanged.connect(self._filter_items)
+        self.list_widget.itemClicked.connect(self._on_item_clicked)
+        
     def showPopup(self):
-        self.view().setMinimumWidth(max(self.width(), 160))
-        super().showPopup()
+        from PySide6.QtWidgets import QListWidget
+        self.search_edit.clear()
+        
+        # Force the menu and the list widget to respect the exact button width
+        w = self.width()
+        self.search_menu.setFixedWidth(w)
+        self.list_widget.setMaximumWidth(w)
+        
+        self.search_menu.popup(self.mapToGlobal(self.rect().bottomLeft()))
+        
+        # Scroll to and highlight the currently selected item
+        curr_text = self.currentText()
+        if curr_text:
+            from PySide6.QtCore import Qt
+            items = self.list_widget.findItems(curr_text, Qt.MatchExactly)
+            if items:
+                self.list_widget.setCurrentItem(items[0])
+                self.list_widget.scrollToItem(items[0], QListWidget.PositionAtCenter)
+                
+        self.search_edit.setFocus()
+        
+    def addItem(self, text, data=None):
+        super().addItem(text, data)
+        self.list_widget.addItem(text)
+        
+    def _filter_items(self, text):
+        text = text.lower()
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            item.setHidden(text not in item.text().lower())
+            
+    def _on_item_clicked(self, item):
+        idx = self.list_widget.row(item)
+        self.setCurrentIndex(idx)
+        self.search_menu.hide()
 
 class MultiSelectComboBox(FilterComboBox):
     def __init__(self, placeholder="Select Options", parent=None):
@@ -515,6 +644,8 @@ class DiscoverFilterBar(QWidget):
     def __init__(self):
         super().__init__()
         self.signals = DiscoverFilterBarSignals()
+        self.base_params = {}
+        self._pending_params = {}
 
         # ── Design tokens ─────────────────────────────────────────────────────
         BASE       = "#141720"   # control resting background
@@ -635,17 +766,18 @@ class DiscoverFilterBar(QWidget):
         self.sort_combo.addItem("Newest Releases",    "primary_release_date.desc")
         self.sort_combo.addItem("Highest Revenue",    "revenue.desc")
 
-        # LANGUAGE
-        self.language_combo = FilterComboBox()
-        self.language_combo.setStyleSheet(combo_style)
-        self.language_combo.addItem("Any Language", None)
-        self.language_combo.addItem("English",      "en")
-        self.language_combo.addItem("Spanish",      "es")
-        self.language_combo.addItem("French",       "fr")
-        self.language_combo.addItem("Korean",       "ko")
-        self.language_combo.addItem("Japanese",     "ja")
-        self.language_combo.addItem("Hindi",        "hi")
+        # COUNTRY
+        self.country_combo = SearchableComboBox()
+        self.country_combo.setStyleSheet(combo_style)
+        self.country_combo.setMinimumWidth(160)
+        self.country_combo.addItem("Any Country", None)
 
+        # LANGUAGE
+        self.language_combo = SearchableComboBox()
+        self.language_combo.setStyleSheet(combo_style)
+        self.language_combo.setMinimumWidth(160)
+        self.language_combo.addItem("Any Language", None)
+        
         # ── YEAR RANGE
         import datetime
         current_year = datetime.datetime.now().year        # YEAR (FROM / TO)
@@ -746,6 +878,7 @@ class DiscoverFilterBar(QWidget):
         filter_layout.addWidget(self.show_me_combo)
         filter_layout.addWidget(self.genre_combo)
         filter_layout.addWidget(self.sort_combo)
+        filter_layout.addWidget(self.country_combo)
         filter_layout.addWidget(self.language_combo)
         filter_layout.addLayout(year_layout)
         filter_layout.addWidget(self.rating_combo)
@@ -770,10 +903,37 @@ class DiscoverFilterBar(QWidget):
             return
         for genre in genres:
             self.genre_combo.addItem(genre["name"], genre["id"])
+        if hasattr(self, '_pending_params') and "with_genres" in self._pending_params:
+            genres_list = [int(x) for x in self._pending_params["with_genres"].split(",")]
+            self.genre_combo.setChecked(genres_list)
+
+    def populate_languages(self, languages):
+        if self.language_combo.count() > 1:
+            return
+        for lang in languages:
+            self.language_combo.addItem(lang.get("english_name", ""), lang.get("iso_639_1", ""))
+        if hasattr(self, '_pending_params') and "with_original_language" in self._pending_params:
+            idx = self.language_combo.findData(self._pending_params["with_original_language"])
+            self.language_combo.setCurrentIndex(max(0, idx))
+
+    def populate_countries(self, countries):
+        if self.country_combo.count() > 1:
+            return
+        for country in countries:
+            self.country_combo.addItem(country.get("english_name", ""), country.get("iso_3166_1", ""))
+        if hasattr(self, '_pending_params') and "with_origin_country" in self._pending_params:
+            idx = self.country_combo.findData(self._pending_params["with_origin_country"])
+            self.country_combo.setCurrentIndex(max(0, idx))
 
     def set_params(self, params):
         if params is None:
             params = {}
+            
+        # Retain parameters that don't have a UI control
+        ui_keys = ["show_me", "with_genres", "sort_by", "with_original_language", 
+                  "with_origin_country", "primary_release_date.gte", 
+                  "primary_release_date.lte", "vote_average.gte", "query"]
+        self.base_params = {k: v for k, v in params.items() if k not in ui_keys}
             
         main_win = self.window()
         if hasattr(main_win, "search_bar"):
@@ -789,16 +949,25 @@ class DiscoverFilterBar(QWidget):
             self.show_me_combo.setCurrentIndex(0)
 
         if "with_genres" in params:
-            genres_list = [int(x) for x in params["with_genres"].split(",")]
+            self._pending_params["with_genres"] = params["with_genres"]
+            genres_list = [int(x) for x in str(params["with_genres"]).split(",")]
             self.genre_combo.setChecked(genres_list)
         else:
             self.genre_combo.setChecked([])
 
         if "with_original_language" in params:
+            self._pending_params["with_original_language"] = params["with_original_language"]
             idx = self.language_combo.findData(params["with_original_language"])
             self.language_combo.setCurrentIndex(max(0, idx))
         else:
             self.language_combo.setCurrentIndex(0)
+            
+        if "with_origin_country" in params:
+            self._pending_params["with_origin_country"] = params["with_origin_country"]
+            idx = self.country_combo.findData(params["with_origin_country"])
+            self.country_combo.setCurrentIndex(max(0, idx))
+        else:
+            self.country_combo.setCurrentIndex(0)
 
         if "sort_by" in params:
             idx = self.sort_combo.findData(params["sort_by"])
@@ -827,7 +996,7 @@ class DiscoverFilterBar(QWidget):
             self.rating_combo.setCurrentIndex(0)
 
     def _apply(self):
-        params = {}
+        params = self.base_params.copy()
 
         show_me = self.show_me_combo.currentData()
         if show_me:
@@ -844,6 +1013,10 @@ class DiscoverFilterBar(QWidget):
         lang = self.language_combo.currentData()
         if lang:
             params["with_original_language"] = lang
+            
+        country = self.country_combo.currentData()
+        if country:
+            params["with_origin_country"] = country
 
         from_y = self.from_year.currentData()
         if from_y is not None:

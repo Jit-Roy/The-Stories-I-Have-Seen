@@ -1,8 +1,14 @@
 import sqlite3
 import os
 import json
+import sys
 
-DB_NAME = "movies.db"
+if getattr(sys, 'frozen', False):
+    base_dir = os.path.dirname(sys.executable)
+else:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
+DB_NAME = os.path.join(base_dir, "movies.db")
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)

@@ -5,6 +5,12 @@ from ui.main_window import MainWindow
 import database
 
 def main():
+    if getattr(sys, 'frozen', False):
+        base_dir = sys._MEIPASS
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(base_dir)
+    
     # Initialize the database
     database.init_db()
     
@@ -12,11 +18,11 @@ def main():
     from PySide6.QtGui import QIcon
     
     # Set AppUserModelID so Windows taskbar correctly groups and uses the custom icon
-    myappid = 'jitroy.thestoriesihaveseen.app.1.0'
-    try:
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-    except Exception:
-        pass
+    # myappid = 'jitroy.thestoriesihaveseen.app.1.0'
+    # try:
+    #     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    # except Exception:
+    #     pass
 
     app = QApplication(sys.argv)
     

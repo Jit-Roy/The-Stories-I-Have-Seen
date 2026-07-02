@@ -64,6 +64,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("The Stories I Carry")
         self.setMinimumSize(1200, 800)
+        from PySide6.QtGui import QIcon
+        self.setWindowIcon(QIcon("assets/icons/main_logo.ico"))
+        
         self.page_history = []
 
         self.central_widget = QWidget()

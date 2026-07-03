@@ -156,6 +156,17 @@ class MovieDetailPage(QWidget):
         self.overview_label.setWordWrap(True)
 
         action_layout = QHBoxLayout()
+        self.btn_play = QPushButton("▶   Play Movie")
+        self.btn_play.setCursor(Qt.PointingHandCursor)
+        self.btn_play.setStyleSheet("""
+            QPushButton {
+                background-color: #E50914; color: white; border-radius: 6px;
+                padding: 10px 24px; font-weight: bold; font-size: 14px; border: none;
+            }
+            QPushButton:hover { background-color: #F40612; }
+        """)
+        self.btn_play.clicked.connect(self.play_movie)
+
         self.btn_watched = QPushButton("Mark Watched")
         self.btn_watched.setCursor(Qt.PointingHandCursor)
         self.btn_watched.clicked.connect(
@@ -174,6 +185,7 @@ class MovieDetailPage(QWidget):
             )
         )
 
+        action_layout.addWidget(self.btn_play)
         action_layout.addWidget(self.btn_watched)
         action_layout.addWidget(self.btn_later)
         action_layout.addStretch()
@@ -185,9 +197,9 @@ class MovieDetailPage(QWidget):
         info_layout.addWidget(self.credits_label)
         info_layout.addSpacing(10)
         info_layout.addWidget(self.overview_label)
+        info_layout.addStretch()
         info_layout.addSpacing(20)
         info_layout.addLayout(action_layout)
-        info_layout.addStretch()
 
         bd_layout.addSpacing(30)
         bd_layout.addLayout(info_layout)
@@ -244,6 +256,19 @@ class MovieDetailPage(QWidget):
 
         scroll.setWidget(self.content_widget)
         self.layout.addWidget(scroll)
+
+    # ------------------------------------------------------------------
+    # Player controls
+    # ------------------------------------------------------------------
+    def play_movie(self):
+        if not self.movie_data:
+            return
+        tmdb_id = self.movie_data.get("id")
+        if tmdb_id:
+            import webbrowser
+            url = f"https://vidsrc.sbs/embed/movie/{tmdb_id}"
+            print(f"[Player] Opening system browser: {url}")
+            webbrowser.open(url)
 
     # ------------------------------------------------------------------
     # Helpers

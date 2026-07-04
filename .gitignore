@@ -29,6 +29,11 @@ dist/
 # Downloads and Temp Files
 Downloads/
 downloads_history.json
+formats_dump.json
 *.part
 *.ytdl
 *.m3u8
+
+# Chrome Profiles
+chrome_debug_profile/
+scratch_hls_downloader/

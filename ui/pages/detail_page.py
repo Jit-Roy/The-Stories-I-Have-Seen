@@ -6,8 +6,11 @@ from PySide6.QtCore import Qt, QThreadPool, QUrl, QRunnable, Signal, QObject
 from PySide6.QtGui import QPixmap, QImage, QPainter, QDesktopServices, QColor, QPainterPath
 from ui.movie_card import RoundedImage, ImageLoader, MovieCard
 from ui.components import HorizontalCarousel
+from ui.stream_dialog import StreamSelectionDialog
+from ui.chrome_sniffer import ChromeSnifferDialog
 import tmdb_api
 from download_manager import DownloadManager
+from PySide6.QtWidgets import QDialog, QWidget
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +100,7 @@ class MovieDetailPage(QWidget):
         self.download_manager = DownloadManager()
         self.download_manager.progress_updated.connect(self._on_download_progress)
         self.download_manager.status_updated.connect(self._on_download_status)
+        self.download_manager.probe_finished.connect(self._on_probe_finished)
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -302,17 +306,34 @@ class MovieDetailPage(QWidget):
                 manager.resume_download(tmdb_id)
                 self.btn_download.setText("Initializing...")
                 return
-            elif status not in ("Completed", "Error", "Download Failed") and not status.startswith("Error"):
+            elif status == "Pending selection...":
+                pass # allow re-opening dialog if needed
+            elif status not in ("Completed", "Error", "Download Failed", "Error: Restart required") and not status.startswith("Error"):
                 manager.pause_download(tmdb_id)
                 return
         
-        # We can add full metadata before triggering download
-        # if the details worker has finished, use self._last_details to augment
-        movie = self._last_details if self._last_details else self.movie_data
-        
-        manager.start_download(movie)
-        
-        self.btn_download.setText("Initializing...")
+        # Ensure download manager is passed to detail page during setup
+        if not hasattr(self, "download_manager") or not self.download_manager:
+            return
+
+        movie_id = str(self.movie_data.get('id', ''))
+        if not movie_id:
+            return
+
+        # Native Chrome Sniffer approach
+        dialog = ChromeSnifferDialog(movie_id, self)
+        if dialog.exec():
+            selection = dialog.get_selection()
+            if selection and selection.get('m3u8_url'):
+                # Pass to download_manager to do the fast probe and trigger stream selection
+                self.btn_download.setText("Fetching options...")
+                self.download_manager.start_fast_probe(
+                    movie_data=self.movie_data,
+                    m3u8_url=selection['m3u8_url'],
+                    embed_url=selection['embed_url'],
+                    cookies=selection.get('cookies', []),
+                    headers=selection.get('headers', {})
+                )
 
     # ------------------------------------------------------------------
     # Helpers
@@ -556,6 +577,28 @@ class MovieDetailPage(QWidget):
                     QPushButton:hover { background-color: #9b4dca; }
                 """)
                 self.btn_download.setEnabled(True)
+
+    def _on_probe_finished(self, tmdb_id, results, error_msg):
+        if self.movie_data and self.movie_data.get("id") == tmdb_id:
+            if not error_msg and results:
+                dialog = StreamSelectionDialog(results, self)
+                if dialog.exec() == QDialog.Accepted:
+                    sel = dialog.get_selection()
+                    movie = self._last_details if self._last_details else self.movie_data
+                    self.download_manager.start_download(
+                        movie,
+                        m3u8_url=sel['m3u8_url'],
+                        page_url=sel['embed_url'],
+                        audio_format_id=sel['audio_id'],
+                        subtitle_lang=sel['subtitle'],
+                        cookies=sel.get('cookies', []),
+                        headers=sel.get('headers', {})
+                    )
+                else:
+                    self.download_manager.active_downloads.pop(tmdb_id, None)
+                    self.update_buttons()
+            else:
+                self.update_buttons()
 
     def _on_download_progress(self, tmdb_id, dl_info):
         if self.movie_data and self.movie_data.get("id") == tmdb_id:

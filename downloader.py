@@ -557,8 +557,8 @@ async def auto_player_loop(page, target_url, duration=20):
 
             if video_box and not is_playing:
                 print(f"[~] Auto-clicker targeting: {video_box['tag']} at ({video_box['x']:.0f}, {video_box['y']:.0f})")
-                if not await is_fake_play_button(page, video_box['x'], video_box['y'], target_url):
-                    await page.mouse.click(video_box['x'], video_box['y'])
+                # Try clicking anyway to clear ad overlays, navigation guard will protect us
+                await page.mouse.click(video_box['x'], video_box['y'])
 
         except Exception:
             pass
@@ -628,6 +628,228 @@ async def _extract_vidzee_embed_urls(page, page_url: str) -> list:
 
     return embed_urls
 
+
+
+async def probe_all_servers(url, progress_callback=None):
+    import json
+    import subprocess
+    def log(msg):
+        print(msg)
+        if progress_callback:
+            progress_callback({"type": "log", "message": msg})
+
+    log(f"[*] Probing all servers for: {url}")
+    captured_urls = set()
+    media_found = asyncio.Event()
+    browser_cookies = []
+    
+    server_results = {}
+    
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=False,
+            args=[
+                '--autoplay-policy=no-user-gesture-required',
+                '--disable-features=PreloadMediaEngagementData',
+                '--disable-blink-features=AutomationControlled',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-infobars',
+            ]
+        )
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+            viewport={'width': 1280, 'height': 800},
+            locale='en-US',
+            timezone_id='America/New_York',
+        )
+
+        allowed_hosts = await install_navigation_guard(context, url)
+        
+        await context.add_init_script(r'''
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined, configurable: true });
+            if (!window.chrome) {
+                window.chrome = {
+                    runtime: { onMessage: { addListener: () => {}, removeListener: () => {} }, connect: () => ({}), sendMessage: () => {} },
+                    loadTimes: () => ({}), csi: () => ({}), app: {}
+                };
+            }
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+            const originalQuery = window.navigator.permissions ? window.navigator.permissions.query.bind(navigator.permissions) : null;
+            if (originalQuery) {
+                navigator.permissions.query = (parameters) => parameters.name === 'notifications' ? Promise.resolve({ state: Notification.permission }) : originalQuery(parameters);
+            }
+        ''')
+
+        await context.add_init_script(r'''
+            window.__captures = [];
+            const _create = URL.createObjectURL;
+            URL.createObjectURL = function(obj) {
+                const url = _create.call(this, obj);
+                window.__captures.push({ type: 'blob', url, mime: obj.type || '' });
+                return url;
+            };
+            if (window.MediaSource) {
+                const _addSB = MediaSource.prototype.addSourceBuffer;
+                MediaSource.prototype.addSourceBuffer = function(mime) {
+                    const sb = _addSB.call(this, mime);
+                    window.__captures.push({ type: 'mse_mime', url: 'mse://' + mime, mime });
+                    return sb;
+                };
+            }
+            const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+            if (desc) {
+                Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+                    set(v) {
+                        if (v) window.__captures.push({ type: 'video_src', url: v });
+                        desc.set.call(this, v);
+                    }
+                });
+            }
+            const _fetch = window.fetch;
+            window.fetch = function(input, init) {
+                const url = typeof input === 'string' ? input : (input ? input.url : '');
+                if (url && /\.(m3u8|mpd|mp4|ts|m4s|webm)(?:[\?#]|$)/i.test(url)) {
+                    window.__captures.push({ type: 'fetch', url });
+                }
+                return _fetch.call(this, input, init);
+            };
+        ''')
+
+        context.on('response', make_oracle_layer_b(captured_urls, media_found))
+
+        page = await context.new_page()
+        setup_popunder_blocker(context, page)
+        
+        polling_task = asyncio.create_task(oracle_layer_d_and_a_poll(page, captured_urls, media_found))
+        autoplay_task = None
+        
+        try:
+            log(f"[-] Loading {url}...")
+            await page.goto(url, wait_until="domcontentloaded")
+            await asyncio.sleep(3)
+            
+            embed_urls = await _extract_vidzee_embed_urls(page, url)
+            
+            if embed_urls:
+                log(f"[+] Extracted {len(embed_urls)} embed URL(s) from VidZeeData.")
+                
+                await page.evaluate('''() => {
+                    if (!window.__vzEchoListenerAdded) {
+                        window.addEventListener('message', function(evt) {
+                            if (typeof evt.data === 'string' && evt.data.indexOf('vz_sb_echo_') === 0) {
+                                if (evt.source) evt.source.postMessage(evt.data, '*');
+                            }
+                        });
+                        window.__vzEchoListenerAdded = true;
+                    }
+                }''')
+                
+                for embed_url in embed_urls:
+                    server_name = urlparse(embed_url).netloc
+                    log(f"\n[-] Probing server: {server_name}")
+                    
+                    captured_urls.clear()
+                    media_found.clear()
+                    
+                    try:
+                        await page.evaluate(f'''() => {{
+                            document.querySelectorAll('iframe[data-oracle-player]').forEach(f => f.remove());
+                            const iframe = document.createElement('iframe');
+                            iframe.src = '{embed_url}';
+                            iframe.setAttribute('data-oracle-player', '1');
+                            iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;border:none;';
+                            iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+                            iframe.setAttribute('sandbox', 'allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation');
+                            document.body.appendChild(iframe);
+                        }}''')
+                        
+                        await asyncio.sleep(3)
+                        
+                        autoplay_task = asyncio.create_task(auto_player_loop(page, embed_url, duration=10))
+                        
+                        try:
+                            await asyncio.wait_for(media_found.wait(), timeout=10.0)
+                            await asyncio.sleep(2)
+                        except asyncio.TimeoutError:
+                            log(f"[!] No stream detected for {server_name}")
+                            autoplay_task.cancel()
+                            continue
+                            
+                        autoplay_task.cancel()
+                        
+                        # Find the first m3u8 in captured urls
+                        m3u8_url = next((u for u in captured_urls if '.m3u8' in u.lower()), None)
+                        if not m3u8_url:
+                            log(f"[!] No m3u8 found for {server_name}, skipping format extraction.")
+                            continue
+                            
+                        # Use yt-dlp -J to extract info
+                        log(f"[-] Extracting languages and subtitles for {server_name}...")
+                        current_cookies = await context.cookies()
+                        cookie_header = "; ".join([f"{c['name']}={c['value']}" for c in current_cookies])
+                        
+                        cmd = [
+                            'yt-dlp', '-J', m3u8_url,
+                            '--extractor-args', 'generic:impersonate',
+                            '--add-header', f'Referer:{embed_url}',
+                            '--add-header', f'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+                            '--add-header', f'Cookie:{cookie_header}',
+                            '--no-warnings'
+                        ]
+                        
+                        process = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+                        if process.returncode == 0:
+                            try:
+                                info = json.loads(process.stdout)
+                                
+                                # Parse audio
+                                audio_tracks = []
+                                formats = info.get('formats', [])
+                                for f in formats:
+                                    if f.get('vcodec') == 'none':
+                                        track_info = {
+                                            'format_id': f.get('format_id'),
+                                            'language': f.get('language') or f.get('format_note') or 'Unknown'
+                                        }
+                                        if track_info not in audio_tracks:
+                                            audio_tracks.append(track_info)
+                                            
+                                # Parse subtitles
+                                subtitles = list(info.get('subtitles', {}).keys())
+                                
+                                server_results[server_name] = {
+                                    'm3u8_url': m3u8_url,
+                                    'embed_url': embed_url,
+                                    'audio': audio_tracks,
+                                    'subtitles': subtitles
+                                }
+                                log(f"[+] {server_name} - Found {len(audio_tracks)} audio track(s), {len(subtitles)} subtitle(s)")
+                                
+                            except json.JSONDecodeError:
+                                log(f"[!] Failed to parse yt-dlp JSON output for {server_name}")
+                        else:
+                            log(f"[!] yt-dlp failed for {server_name}")
+                            
+                    except Exception as e:
+                        log(f"[!] Exception probing {server_name}: {e}")
+            else:
+                log("[!] No embed URLs found. Cannot probe multi-server.")
+                
+        except Exception as e:
+            log(f"[!] Probe error: {e}")
+        finally:
+            polling_task.cancel()
+            if autoplay_task: autoplay_task.cancel()
+            try:
+                browser_cookies = await context.cookies()
+            except:
+                pass
+            await browser.close()
+            log("[*] Browser closed.")
+            
+    return server_results, browser_cookies
 
 async def intercept_media(url, download_path="Downloads", progress_callback=None, abort_event=None, filename_prefix=None):
     def log(msg):
@@ -1026,104 +1248,17 @@ def download_raw(url, page_url, cookies=None, progress_callback=None, download_p
     except Exception as e:
         print(f"\n[!] Raw download failed: {e}")
 
-def download_media(url, page_url, cookies=None, progress_callback=None, download_path=None, abort_event=None, filename_prefix=None):
+def download_media(url, page_url=None, cookies=None, headers=None, progress_callback=None, download_path=None, abort_event=None, filename_prefix=None, audio_format_id=None, subtitle_lang=None):
+    from yt_dlp.utils import check_executable
+    if not check_executable('ffmpeg'):
+        raise Exception("FFmpeg is missing! FFmpeg is REQUIRED to merge the video and audio tracks for this stream. Please install FFmpeg and add it to your system PATH.")
 
     def log(msg):
         print(msg)
         if progress_callback:
             progress_callback({"type": "log", "message": msg})
 
-    """
-    Download via yt-dlp, passing harvested browser cookies via a temp cookie file.
-    This lets yt-dlp authenticate each segment request with the real session.
-    """
-    def rewrite_and_localize_m3u8(master_url: str, cookies: list, referer: str) -> str:
-        import urllib.parse
-        from curl_cffi import requests
-        import tempfile
-        import re
-        import os
-        
-        cookie_jar = {c['name']: c['value'] for c in (cookies or [])}
-        headers = {
-            'Referer': referer,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
-        }
-        
-        parsed_master = urllib.parse.urlparse(master_url)
-        h_param = urllib.parse.parse_qs(parsed_master.query).get('h', [''])[0]
-        
-        print("  [-] Rewriting M3U8 to carry over authentication tokens...")
-        # 1. Fetch master
-        res = requests.get(master_url, cookies=cookie_jar, headers=headers, impersonate='chrome')
-        res.raise_for_status()
-        
-        lines = res.text.strip().split('\n')
-        is_master = any(line.startswith('#EXT-X-STREAM-INF') for line in lines)
-        if is_master:
-            sub_url = None
-            for line in lines:
-                if line and not line.startswith('#'):
-                    sub_url = line.strip()
-                    break # Just take the first (best) variant
-            if not sub_url:
-                return master_url
-            sub_url = urllib.parse.urljoin(master_url, sub_url)
-            if h_param:
-                sep = '&' if '?' in sub_url else '?'
-                if f"h={h_param}" not in sub_url:
-                    sub_url = f"{sub_url}{sep}h={h_param}"
-            res2 = requests.get(sub_url, cookies=cookie_jar, headers=headers, impersonate='chrome')
-            res2.raise_for_status()
-            sub_playlist_text = res2.text.strip()
-        else:
-            # It's already a sub-playlist
-            sub_url = master_url
-            sub_playlist_text = res.text.strip()
-        
-        new_lines = []
-        for line in sub_playlist_text.split('\n'):
-            if not line:
-                continue
-            if line.startswith('#EXT-X-KEY'):
-                m = re.search(r'URI=\"([^\"]+)\"', line)
-                if m:
-                    uri = m.group(1)
-                    uri = urllib.parse.urljoin(sub_url, uri)
-                    if h_param and f"h={h_param}" not in uri:
-                        sep = '&' if '?' in uri else '?'
-                        uri = f"{uri}{sep}h={h_param}"
-                    line = line[:m.start(1)] + uri + line[m.end(1):]
-                new_lines.append(line)
-            elif line and not line.startswith('#'):
-                uri = line.strip()
-                uri = urllib.parse.urljoin(sub_url, uri)
-                if h_param and f"h={h_param}" not in uri:
-                    sep = '&' if '?' in uri else '?'
-                    uri = f"{uri}{sep}h={h_param}"
-                new_lines.append(uri)
-            else:
-                new_lines.append(line)
-                
-        if '#EXT-X-ENDLIST' not in new_lines:
-            new_lines.append('#EXT-X-ENDLIST')
-            
-        fd, temp_path = tempfile.mkstemp(suffix='.m3u8', prefix='rewritten_', text=True)
-        with os.fdopen(fd, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(new_lines))
-            
-        return temp_path
-        
     try:
-        temp_m3u8_file = None
-        if '.m3u8' in url or '?m3u8=' in url:
-            try:
-                temp_m3u8_file = rewrite_and_localize_m3u8(url, cookies, page_url)
-                if temp_m3u8_file and temp_m3u8_file.endswith('.m3u8'):
-                    url = f"file:///{temp_m3u8_file.replace(os.sep, '/')}"
-            except Exception as e:
-                print(f"  [!] Failed to rewrite M3U8: {e}")
-                
         cookie_header = ""
         if cookies:
             cookie_header = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
@@ -1136,11 +1271,30 @@ def download_media(url, page_url, cookies=None, progress_callback=None, download
         else:
             outtmpl = f'{base_name}.%(ext)s'
 
+        if audio_format_id:
+            format_str = f'bestvideo+{audio_format_id}/bestvideo+bestaudio/best'
+        else:
+            format_str = 'bestvideo+bestaudio/best'
+
+        http_headers = {
+            'Referer': page_url,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+        }
+        if cookie_header:
+            http_headers['Cookie'] = cookie_header
+            
+        if headers:
+            for k, v in headers.items():
+                if k.startswith(':'):
+                    continue
+                if k.lower() not in ['accept-encoding', 'host', 'connection', 'cookie']:
+                    http_headers[k] = v
+
         ydl_opts = {
             'outtmpl': outtmpl,
             'quiet': False,
             'no_warnings': True,
-            'format': 'best',
+            'format': format_str,
             'hls_prefer_native': True,
             'enable_file_urls': True,
             'concurrent_fragment_downloads': 5,
@@ -1148,12 +1302,16 @@ def download_media(url, page_url, cookies=None, progress_callback=None, download
             'fragment_retries': 30,
             'file_access_retries': 30,
             'socket_timeout': 60,
-            'http_headers': {
-                'Referer': page_url,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
-                'Cookie': cookie_header
-            },
+            'extractor_args': {'generic': {'impersonate': ['chrome']}},
+            'http_headers': http_headers,
         }
+
+        if subtitle_lang:
+            ydl_opts['writesubtitles'] = True
+            ydl_opts['subtitleslangs'] = [subtitle_lang]
+            ydl_opts['embedsubtitles'] = True
+            ydl_opts['compat_opts'] = set(['no-live-chat']) # just to safely modify
+    
         
         try:
             from tqdm import tqdm

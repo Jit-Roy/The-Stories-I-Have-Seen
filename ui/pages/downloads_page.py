@@ -125,9 +125,12 @@ class DownloadItemWidget(QFrame):
         
         # Format speed
         speed = dl_info.get("speed", 0)
-        if speed > 1024 * 1024:
+        if isinstance(speed, str):
+            speed = 0
+            
+        if speed and speed > 1024 * 1024:
             speed_str = f"{speed / (1024 * 1024):.1f} MB/s"
-        elif speed > 1024:
+        elif speed and speed > 1024:
             speed_str = f"{speed / 1024:.1f} KB/s"
         else:
             speed_str = f"{speed} B/s" if speed else ""

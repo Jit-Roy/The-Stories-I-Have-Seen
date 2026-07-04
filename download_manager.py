@@ -1,21 +1,125 @@
 import os
 import asyncio
 from PySide6.QtCore import QObject, Signal, QRunnable, QThreadPool
-
 import threading
+import yt_dlp
 
 class WorkerSignals(QObject):
     progress = Signal(int, dict)
     finished = Signal(int, bool, str)
 
-class DownloadWorker(QRunnable):
-    def __init__(self, tmdb_id, url, download_path, abort_event=None, filename_prefix=None):
+class ProbeWorkerSignals(QObject):
+    progress = Signal(int, dict)
+    finished = Signal(int, dict, str)
+
+class ProbeWorker(QRunnable):
+    def __init__(self, tmdb_id, url):
         super().__init__()
         self.tmdb_id = tmdb_id
         self.url = url
+        self.signals = ProbeWorkerSignals()
+
+    def run(self):
+        try:
+            import sys
+            if sys.platform == 'win32':
+                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            
+            import downloader
+            def progress_cb(data):
+                self.signals.progress.emit(self.tmdb_id, data)
+                
+            results, cookies = asyncio.run(downloader.probe_all_servers(self.url, progress_callback=progress_cb))
+            self.signals.finished.emit(self.tmdb_id, results, "")
+        except Exception as e:
+            self.signals.finished.emit(self.tmdb_id, {}, str(e))
+
+class FastProbeWorker(QRunnable):
+    def __init__(self, tmdb_id, m3u8_url, embed_url, cookies=None, headers=None):
+        super().__init__()
+        self.tmdb_id = tmdb_id
+        self.m3u8_url = m3u8_url
+        self.embed_url = embed_url
+        self.cookies = cookies or []
+        self.headers = headers or {}
+        self.signals = ProbeWorkerSignals()
+
+    def run(self):
+        try:
+            cookie_header = "; ".join([f"{c['name']}={c['value']}" for c in self.cookies]) if self.cookies else ""
+            
+            http_headers = {
+                'Referer': self.embed_url,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+            }
+            
+            # Merge sniffed headers if provided (this bypasses strict Cloudflare checks)
+            for k, v in self.headers.items():
+                if k.startswith(':'):
+                    continue
+                if k.lower() not in ['accept-encoding', 'host', 'connection']: # exclude browser-specific network headers that yt-dlp manages
+                    http_headers[k] = v
+                    
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'dump_single_json': True,
+                'extract_flat': True,
+                'extractor_args': {'generic': {'impersonate': ['chrome']}},
+                'http_headers': http_headers
+            }
+            if cookie_header:
+                ydl_opts['http_headers']['Cookie'] = cookie_header
+            def progress_cb(msg):
+                self.signals.progress.emit(self.tmdb_id, {"type": "log", "message": msg})
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                progress_cb("Probing fast stream...")
+                info = ydl.extract_info(self.m3u8_url, download=False)
+                
+                audio_tracks = []
+                subtitles = []
+                
+                formats = info.get('formats', [info])
+                for f in formats:
+                    if f.get('vcodec') == 'none' and f.get('acodec') != 'none':
+                        audio_tracks.append({
+                            'format_id': f.get('format_id', ''),
+                            'language': f.get('language') or f.get('format_note') or 'Unknown'
+                        })
+                
+                subs = info.get('subtitles', {})
+                for lang, sub_list in subs.items():
+                    subtitles.append(lang)
+                
+                results = {
+                    "sniffed_stream": {
+                        "m3u8_url": self.m3u8_url,
+                        "embed_url": self.embed_url,
+                        "cookies": self.cookies,
+                        "headers": self.headers,
+                        "audio": audio_tracks,
+                        "subtitles": subtitles
+                    }
+                }
+                
+                self.signals.finished.emit(self.tmdb_id, results, "")
+        except Exception as e:
+            self.signals.finished.emit(self.tmdb_id, {}, str(e))
+
+class DownloadWorker(QRunnable):
+    def __init__(self, tmdb_id, url, page_url, audio_format_id, subtitle_lang, download_path, abort_event=None, filename_prefix=None, cookies=None, headers=None):
+        super().__init__()
+        self.tmdb_id = tmdb_id
+        self.url = url
+        self.page_url = page_url
+        self.audio_format_id = audio_format_id
+        self.subtitle_lang = subtitle_lang
         self.download_path = download_path
         self.abort_event = abort_event
         self.filename_prefix = filename_prefix
+        self.cookies = cookies or []
+        self.headers = headers or {}
         self.signals = WorkerSignals()
 
     def run(self):
@@ -28,8 +132,19 @@ class DownloadWorker(QRunnable):
             def progress_cb(data):
                 self.signals.progress.emit(self.tmdb_id, data)
 
-            asyncio.run(downloader.intercept_media(self.url, progress_callback=progress_cb, download_path=self.download_path, abort_event=self.abort_event, filename_prefix=self.filename_prefix))
-            self.signals.finished.emit(self.tmdb_id, True, None)
+            downloader.download_media(
+                url=self.url,
+                page_url=self.page_url,
+                cookies=self.cookies,
+                headers=self.headers,
+                progress_callback=progress_cb,
+                download_path=self.download_path,
+                abort_event=self.abort_event,
+                filename_prefix=self.filename_prefix,
+                audio_format_id=self.audio_format_id,
+                subtitle_lang=self.subtitle_lang
+            )
+            self.signals.finished.emit(self.tmdb_id, True, "")
         except Exception as e:
             self.signals.finished.emit(self.tmdb_id, False, str(e))
 
@@ -39,6 +154,7 @@ class DownloadManager(QObject):
     status_updated = Signal(int, str)
     download_finished = Signal(int, bool, str)
     download_started = Signal(int, dict)
+    probe_finished = Signal(int, dict, str)
 
     def __new__(cls):
         if cls._instance is None:
@@ -52,6 +168,7 @@ class DownloadManager(QObject):
         super().__init__()
         self._initialized = True
         self.active_downloads = {} # tmdb_id -> { "movie_data": ..., "status": ... }
+        self.abort_events = {}
         self.download_path = os.path.join(os.getcwd(), "Downloads")
         self.history_file = os.path.join(os.getcwd(), "downloads_history.json")
         os.makedirs(self.download_path, exist_ok=True)
@@ -89,30 +206,79 @@ class DownloadManager(QObject):
         except Exception as e:
             print(f"Error saving download history: {e}")
 
-    def start_download(self, movie_data):
+    def start_probe(self, movie_data):
         tmdb_id = movie_data["id"]
-        if tmdb_id in self.active_downloads:
-            dl_info = self.active_downloads[tmdb_id]
-            if not dl_info.get("status", "").startswith("Error") and dl_info.get("status") not in ("Completed", "Paused"):
-                return # Already downloading active stream
-        
         url = f"https://vidsrc.sbs/movie/{tmdb_id}"
-        abort_event = threading.Event()
-        filename_prefix = f"movie_{tmdb_id}"
-        worker = DownloadWorker(tmdb_id, url, self.download_path, abort_event=abort_event, filename_prefix=filename_prefix)
         
         if tmdb_id not in self.active_downloads:
             self.active_downloads[tmdb_id] = {
                 "movie_data": movie_data,
-                "status": "Initializing...",
+                "status": "Probing servers...",
                 "percent": 0.0,
                 "speed": 0,
                 "eta": 0,
             }
+        else:
+            self.active_downloads[tmdb_id]["status"] = "Probing servers..."
+            
+        self.status_updated.emit(tmdb_id, "Probing servers...")
+        
+        worker = ProbeWorker(tmdb_id, url)
+        worker.signals.progress.connect(self._on_worker_progress)
+        worker.signals.finished.connect(self._on_probe_finished)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_probe_finished(self, tmdb_id, results, error_msg):
+        if not error_msg and results:
+            self.active_downloads[tmdb_id]["status"] = "Pending selection..."
+            self.status_updated.emit(tmdb_id, "Pending selection...")
+        else:
+            self.active_downloads[tmdb_id]["status"] = f"Probe Error: {error_msg}"
+            self.status_updated.emit(tmdb_id, self.active_downloads[tmdb_id]["status"])
+        self.probe_finished.emit(tmdb_id, results, error_msg)
+
+    def start_fast_probe(self, movie_data, m3u8_url, embed_url, cookies=None, headers=None):
+        tmdb_id = movie_data.get("id")
+        if tmdb_id not in self.active_downloads:
+            self.active_downloads[tmdb_id] = {}
+        self.active_downloads[tmdb_id].update({
+            "movie_data": movie_data,
+            "status": "Pending selection..."
+        })
+        worker = FastProbeWorker(tmdb_id, m3u8_url, embed_url, cookies, headers)
+        worker.signals.progress.connect(self._on_worker_progress)
+        worker.signals.finished.connect(self._on_probe_finished)
+        QThreadPool.globalInstance().start(worker)
+
+    def start_download(self, item, m3u8_url=None, page_url=None, audio_format_id=None, subtitle_lang=None, cookies=None, headers=None):
+        url = m3u8_url
+        if not url:
+            print("[!] start_download called without m3u8_url!")
+            return
+        tmdb_id = item.get("id")
+        
+        if tmdb_id not in self.active_downloads:
+            self.active_downloads[tmdb_id] = {}
             
         self.active_downloads[tmdb_id].update({
+            "movie_data": item,
+            "status": "Initializing...", 
+            "percent": 0, 
+            "ETA": "Calculating...", 
+            "speed": "0 KiB/s"
+        })
+        
+        abort_event = threading.Event()
+        self.abort_events[tmdb_id] = abort_event
+        
+        prefix = f"{item.get('title', 'Unknown')} ({item.get('year', '')})"
+        prefix = prefix.replace(":", " -").replace("/", "-").replace("\\", "-")
+        
+        worker = DownloadWorker(tmdb_id, url, page_url, audio_format_id, subtitle_lang, self.download_path, abort_event, filename_prefix=prefix, cookies=cookies, headers=headers)
+        
+        self.active_downloads[tmdb_id].update({
             "status": "Initializing...",
-            "worker": worker, # Prevent garbage collection
+            "worker": worker,
             "abort_event": abort_event
         })
         
@@ -134,9 +300,12 @@ class DownloadManager(QObject):
                 self.save_history()
 
     def resume_download(self, tmdb_id):
+        # We can't actually resume because we don't save the m3u8_url in history yet.
+        # But for now, we'll just set status.
         if tmdb_id in self.active_downloads:
-            movie_data = self.active_downloads[tmdb_id]["movie_data"]
-            self.start_download(movie_data)
+            dl_info = self.active_downloads[tmdb_id]
+            dl_info["status"] = "Error: Restart required"
+            self.status_updated.emit(tmdb_id, "Error: Restart required")
 
     def _on_worker_progress(self, tmdb_id, data):
         if tmdb_id not in self.active_downloads:
@@ -144,12 +313,9 @@ class DownloadManager(QObject):
         
         dl_info = self.active_downloads[tmdb_id]
         if data["type"] == "log":
-            # Extract status from log
             msg = data["message"]
-            if "Intercepting" in msg or "Starting" in msg:
-                dl_info["status"] = "Intercepting stream..."
-            elif "Injecting player iframe" in msg:
-                dl_info["status"] = "Bypassing anti-bot..."
+            if "Probing" in msg:
+                dl_info["status"] = "Probing..."
             elif "Downloading:" in msg or "started..." in msg:
                 dl_info["status"] = "Downloading..."
             elif "completed successfully" in msg:

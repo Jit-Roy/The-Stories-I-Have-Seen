@@ -133,6 +133,7 @@ class ChromeSnifferThread(QThread):
             '--remote-debugging-port=9222', 
             f'--user-data-dir={user_data_dir}',
             '--disable-web-security',
+            '--test-type',
             'about:blank'
         ])
 

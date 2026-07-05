@@ -200,7 +200,7 @@ def get_movie_details(movie_id):
     if movie_id in _details_cache:
         return _details_cache[movie_id]
 
-    data = _make_request(f"/movie/{movie_id}", {"append_to_response": "credits,videos,similar"})
+    data = _make_request(f"/movie/{movie_id}", {"append_to_response": "credits,videos,similar,recommendations"})
     if not data:
         return None
 
@@ -237,6 +237,10 @@ def get_movie_details(movie_id):
     similar_data = data.get("similar", {}).get("results", [])
     movie["similar"] = [_format_movie(m) for m in similar_data]
 
+    # Recommendations
+    rec_data = data.get("recommendations", {}).get("results", [])
+    movie["recommendations"] = [_format_movie(m) for m in rec_data]
+
     result = inject_db_status([movie])[0]
     _details_cache[movie_id] = result
     return result
@@ -245,7 +249,7 @@ def get_tv_details(tv_id):
     if f"tv_{tv_id}" in _details_cache:
         return _details_cache[f"tv_{tv_id}"]
 
-    data = _make_request(f"/tv/{tv_id}", {"append_to_response": "credits,videos,similar"})
+    data = _make_request(f"/tv/{tv_id}", {"append_to_response": "credits,videos,similar,recommendations"})
     if not data:
         return None
 
@@ -279,6 +283,9 @@ def get_tv_details(tv_id):
     similar_data = data.get("similar", {}).get("results", [])
     tv["similar"] = [_format_tv(m) for m in similar_data]
 
+    rec_data = data.get("recommendations", {}).get("results", [])
+    tv["recommendations"] = [_format_tv(m) for m in rec_data]
+
     result = inject_db_status([tv])[0]
     _details_cache[f"tv_{tv_id}"] = result
     return result
@@ -289,6 +296,14 @@ def get_similar_movies(movie_id, page=1):
 
 def get_similar_tv(tv_id, page=1):
     data = _make_request(f"/tv/{tv_id}/similar", {"language": "en-US", "page": page})
+    return inject_db_status([_format_tv(m) for m in data.get("results", [])])
+
+def get_recommended_movies(movie_id, page=1):
+    data = _make_request(f"/movie/{movie_id}/recommendations", {"language": "en-US", "page": page})
+    return inject_db_status([_format_movie(m) for m in data.get("results", [])])
+
+def get_recommended_tv(tv_id, page=1):
+    data = _make_request(f"/tv/{tv_id}/recommendations", {"language": "en-US", "page": page})
     return inject_db_status([_format_tv(m) for m in data.get("results", [])])
 
 def get_age_rating(media_id, media_type="movie"):

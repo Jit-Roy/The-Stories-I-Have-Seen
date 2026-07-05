@@ -396,6 +396,12 @@ class MovieDetailPage(QWidget):
         self.similar_layout = QVBoxLayout(self.similar_container)
         self.similar_layout.setContentsMargins(0, 0, 0, 0)
         self.left_column.addWidget(self.similar_container)
+        
+        self.recommendations_container = QWidget()
+        self.recommendations_layout = QVBoxLayout(self.recommendations_container)
+        self.recommendations_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_column.addWidget(self.recommendations_container)
+        
         self.left_column.addStretch()
 
         # --- Right Column: Facts Sidebar ---
@@ -533,6 +539,7 @@ class MovieDetailPage(QWidget):
         self._clear_layout(self.cast_layout)
         self._clear_layout(self.trailers_layout)
         self._clear_layout(self.similar_layout)
+        self._clear_layout(self.recommendations_layout)
         self.facts_label.setText("")
         self.btn_download.setToolTip("Download Movie")
         self.btn_download.set_state("idle")
@@ -654,7 +661,6 @@ class MovieDetailPage(QWidget):
                 trailer_btns_layout.addWidget(btn)
             self.trailers_layout.addLayout(trailer_btns_layout)
 
-        # --- Similar Movies ---
         similar = details.get("similar", [])
         if similar:
             def handle_view_all():
@@ -667,12 +673,32 @@ class MovieDetailPage(QWidget):
                         self.show_grid_view(title, lambda page=1: tmdb_api.get_similar_movies(m_id, page=page))
                         
             carousel = HorizontalCarousel(
-                "Similar Movies",
+                "Similar Movies" if self.movie_data.get("media_type") != "tv" else "Similar Shows",
                 similar,
                 lambda m: MovieCard(m, self.change_status, self.show_movie_detail),
                 on_view_all=handle_view_all if self.show_grid_view else None
             )
             self.similar_layout.addWidget(carousel)
+
+        # --- Recommendations ---
+        recommendations = details.get("recommendations", [])
+        if recommendations:
+            def handle_view_all_rec():
+                if self.show_grid_view and self.movie_data:
+                    title = f"Recommendations for: {self.movie_data.get('title', self.movie_data.get('name', 'Unknown'))}"
+                    m_id = self.movie_data.get("id")
+                    if self.movie_data.get("media_type") == "tv":
+                        self.show_grid_view(title, lambda page=1: tmdb_api.get_recommended_tv(m_id, page=page))
+                    else:
+                        self.show_grid_view(title, lambda page=1: tmdb_api.get_recommended_movies(m_id, page=page))
+                        
+            carousel = HorizontalCarousel(
+                "Recommendations",
+                recommendations,
+                lambda m: MovieCard(m, self.change_status, self.show_movie_detail),
+                on_view_all=handle_view_all_rec if self.show_grid_view else None
+            )
+            self.recommendations_layout.addWidget(carousel)
 
         # --- Facts Sidebar ---
         def format_money(amount):

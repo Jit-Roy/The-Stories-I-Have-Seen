@@ -8,6 +8,7 @@ from ui.pages.collection_page import CollectionPage
 from ui.pages.wishlist_page import WishlistPage
 from ui.pages.detail_page import MovieDetailPage
 from ui.pages.grid_page import GridPage
+from ui.pages.person_page import PersonPage
 from ui.pages.analytics_page import AnalyticsPage
 from ui.pages.downloads_page import DownloadsPage
 from ui.pages.settings_page import SettingsPage
@@ -22,6 +23,7 @@ class TabStack(QStackedWidget):
         self.main_page = None
         self.detail_page = None
         self.grid_page = None
+        self.person_page = None
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +43,11 @@ class _StatusWorker(QRunnable):
 
     def run(self):
         try:
-            details = tmdb_api.get_movie_details(self.movie_data["id"])
+            media_type = self.movie_data.get("media_type", "movie")
+            if media_type == "tv":
+                details = tmdb_api.get_tv_details(self.movie_data["id"])
+            else:
+                details = tmdb_api.get_movie_details(self.movie_data["id"])
             series_name = details.get("series_name") if details else None
             vote_average = details.get("vote_average") if details else self.movie_data.get("vote_average")
             release_date = details.get("release_date") if details else self.movie_data.get("release_date")
@@ -66,7 +72,8 @@ class _StatusWorker(QRunnable):
             cast=details.get("cast") if details else None,
             production_companies=details.get("production_companies") if details else None,
             original_language=details.get("original_language") if details else None,
-            production_countries=prod_countries
+            production_countries=prod_countries,
+            media_type=self.movie_data.get("media_type", "movie")
         )
         tmdb_api.invalidate_db_cache()
         self.signals.finished.emit(self.movie_data, self.new_status)
@@ -98,9 +105,13 @@ class MainWindow(QMainWindow):
         self.setup_top_nav()
 
         self.main_stack = QStackedWidget()
+        self._current_main_index = 0
         self.main_stack.currentChanged.connect(self._on_tab_changed)
 
         self.home_page = HomePage(self.change_status, self.show_movie_detail, self.show_grid_view)
+        self.tv_home_page = HomePage(self.change_status, self.show_movie_detail, self.show_grid_view)
+        self.tv_home_page.set_media_type("tv")
+        
         self.collection_page = CollectionPage(self.change_status, self.show_movie_detail)
         self.wishlist_page = WishlistPage(self.change_status, self.show_movie_detail)
         self.analytics_page = AnalyticsPage(self.show_grid_view)
@@ -109,9 +120,11 @@ class MainWindow(QMainWindow):
         
         self.settings_page.api_key_changed.connect(self._on_api_key_changed)
 
+        self.current_media_type = "movie"
+
         # Create a TabStack for each main tab
         self.tab_stacks = {}
-        for idx, main_widget in enumerate([self.home_page, self.collection_page, self.wishlist_page, None, None, self.analytics_page, self.downloads_page, self.settings_page]):
+        for idx, main_widget in enumerate([self.home_page, self.collection_page, self.wishlist_page, self.tv_home_page, None, self.analytics_page, self.downloads_page, self.settings_page]):
             if main_widget is None:
                 self.main_stack.addWidget(QWidget()) # padding
                 continue
@@ -121,13 +134,16 @@ class MainWindow(QMainWindow):
             t_stack.main_page = main_widget
             
             # Add dedicated Detail and Grid pages if applicable
-            if idx in (0, 1, 2, 5):
-                detail = MovieDetailPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail)
+            if idx in (0, 1, 2, 3, 5):
+                detail = MovieDetailPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail, self.show_person_detail)
                 grid = GridPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail)
+                person = PersonPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail, self.show_grid_view)
                 t_stack.addWidget(detail) # Inner Index 1
                 t_stack.addWidget(grid)   # Inner Index 2
+                t_stack.addWidget(person) # Inner Index 3
                 t_stack.detail_page = detail
                 t_stack.grid_page = grid
+                t_stack.person_page = person
                 self.all_detail_pages.append(detail)
                 self.all_grid_pages.append(grid)
                 
@@ -193,12 +209,38 @@ class MainWindow(QMainWindow):
                 border-top-left-radius: 0px; border-bottom-left-radius: 0px;
             }
         """
+        
+        sub_nav_style = """
+            QPushButton {
+                background-color: transparent; color: #A0AEC0; text-align: left;
+                padding: 8px 16px 8px 24px; font-size: 13px; font-weight: 500; border: none;
+                border-left: 2px solid #2D3748; margin-left: 24px; margin-right: 16px;
+            }
+            QPushButton:hover {
+                color: #FFFFFF;
+            }
+            QPushButton:checked {
+                color: #1AE0A1; border-left: 2px solid #1AE0A1;
+            }
+        """
 
         self.home_btn = QPushButton("  Home")
         self.home_btn.setStyleSheet(nav_style)
         self.home_btn.setCheckable(True)
-        self.home_btn.clicked.connect(lambda: self.switch_page(0, self.home_btn))
+        self.home_btn.clicked.connect(self.toggle_home_subnodes)
         layout.addWidget(self.home_btn)
+
+        self.movies_btn = QPushButton("Movies")
+        self.movies_btn.setStyleSheet(sub_nav_style)
+        self.movies_btn.setCheckable(True)
+        self.movies_btn.clicked.connect(lambda: self.switch_home_mode("movie"))
+        layout.addWidget(self.movies_btn)
+
+        self.tv_btn = QPushButton("TV Series")
+        self.tv_btn.setStyleSheet(sub_nav_style)
+        self.tv_btn.setCheckable(True)
+        self.tv_btn.clicked.connect(lambda: self.switch_home_mode("tv"))
+        layout.addWidget(self.tv_btn)
 
         self.col_btn = QPushButton("  Collection")
         self.col_btn.setStyleSheet(nav_style)
@@ -239,6 +281,7 @@ class MainWindow(QMainWindow):
         self.settings_btn.toggled.connect(self.update_nav_icons)
         layout.addWidget(self.settings_btn)
 
+        self.movies_btn.setChecked(True)
         self.home_btn.setChecked(True)
         self.update_nav_icons()
         
@@ -253,9 +296,36 @@ class MainWindow(QMainWindow):
         self.downloads_btn.setIcon(QIcon("assets/icons/downloads_active.svg" if self.downloads_btn.isChecked() else "assets/icons/downloads.svg"))
         self.settings_btn.setIcon(QIcon("assets/icons/settings_active.svg" if self.settings_btn.isChecked() else "assets/icons/settings.svg"))
 
+
+    def toggle_home_subnodes(self):
+        self.movies_btn.setVisible(True)
+        self.tv_btn.setVisible(True)
+        self.switch_home_mode(self.current_media_type)
+            
+    def switch_home_mode(self, media_type):
+        self.current_media_type = media_type
+        self.movies_btn.setChecked(media_type == "movie")
+        self.tv_btn.setChecked(media_type == "tv")
+        
+        # Uncheck other top-level tabs
+        self.col_btn.setChecked(False)
+        self.wish_btn.setChecked(False)
+        self.analytics_btn.setChecked(False)
+        self.downloads_btn.setChecked(False)
+        self.settings_btn.setChecked(False)
+        
+        # Switch to the appropriate main stack index
+        target_index = 0 if media_type == "movie" else 3
+        self.main_stack.setCurrentIndex(target_index)
+        self.home_btn.setChecked(True)
+        
+        self.update_nav_icons()
+        
     def switch_page(self, index, active_btn):
         self.main_stack.setCurrentIndex(index)
         self.home_btn.setChecked(False)
+        self.movies_btn.setChecked(False)
+        self.tv_btn.setChecked(False)
         self.col_btn.setChecked(False)
         self.wish_btn.setChecked(False)
         self.analytics_btn.setChecked(False)
@@ -280,6 +350,18 @@ class MainWindow(QMainWindow):
         """Called when the user saves a new TMDB API Key from the settings page."""
         self.home_page.load_home_content()
         self.analytics_dirty = True
+
+    def show_person_detail(self, person_id):
+        t_stack = self.main_stack.currentWidget()
+        if not isinstance(t_stack, TabStack) or not t_stack.person_page: return
+        
+        current_index = t_stack.currentIndex()
+        state = t_stack.detail_page.movie_data if current_index == 1 else (t_stack.person_page.person_id if current_index == 3 and hasattr(t_stack.person_page, 'person_id') else None)
+        t_stack.page_history.append((current_index, state))
+        
+        t_stack.person_page.person_id = person_id
+        t_stack.person_page.load_person(person_id)
+        t_stack.setCurrentIndex(3)
 
     def show_movie_detail(self, movie_data):
         t_stack = self.main_stack.currentWidget()
@@ -470,6 +552,8 @@ class MainWindow(QMainWindow):
             t_stack.grid_page.filter_bar._apply()
         elif t_stack.tab_index == 0:
             self.home_page.filter_bar._apply()
+        elif t_stack.tab_index == 3:
+            self.tv_home_page.filter_bar._apply()
         else:
             # Not on home page and not on a search grid, let's switch to home and search
             self.switch_page(0, self.home_btn)
@@ -493,14 +577,34 @@ class MainWindow(QMainWindow):
             elif t_stack.tab_index == 0:
                 import ui.components as components
                 self.home_page.filter_bar.set_params(components.GLOBAL_FILTER_STATE)
+            elif t_stack.tab_index == 3:
+                import ui.components as components
+                self.tv_home_page.filter_bar.set_params(components.GLOBAL_FILTER_STATE)
         elif prev_index == 1 and state and t_stack.detail_page:
             t_stack.detail_page.load_movie(state)
+        elif prev_index == 3 and state and t_stack.person_page:
+            t_stack.person_page.person_id = state
+            t_stack.person_page.load_person(state)
 
         t_stack.setCurrentIndex(prev_index)
 
     def _on_tab_changed(self, index):
+        # Save search text for the previous tab
+        if hasattr(self, "_current_main_index"):
+            prev_stack = self.main_stack.widget(self._current_main_index)
+            if isinstance(prev_stack, TabStack) and hasattr(self, "search_bar"):
+                prev_stack.saved_search_text = self.search_bar.text()
+                
+        self._current_main_index = index
+        
         t_stack = self.main_stack.widget(index)
         if isinstance(t_stack, TabStack):
+            # Restore search text for the new tab
+            if hasattr(self, "search_bar"):
+                self.search_bar.blockSignals(True)
+                self.search_bar.setText(getattr(t_stack, "saved_search_text", ""))
+                self.search_bar.blockSignals(False)
+                
             self._update_search_visibility(t_stack)
                 
             if t_stack.currentIndex() == 0:
@@ -525,7 +629,7 @@ class MainWindow(QMainWindow):
     def _update_search_visibility(self, t_stack):
         if not hasattr(self, "search_wrapper"): return
         inner_index = t_stack.currentIndex()
-        if inner_index == 0 and t_stack.tab_index == 0:
+        if inner_index == 0 and t_stack.tab_index in (0, 3):
             self.search_wrapper.setVisible(True)
         elif inner_index == 2 and getattr(t_stack, "is_text_search", False):
             self.search_wrapper.setVisible(t_stack.grid_page.filter_bar.isVisible())
@@ -572,7 +676,8 @@ class MainWindow(QMainWindow):
                 cast=cached_details.get("cast"),
                 production_companies=cached_details.get("production_companies"),
                 original_language=cached_details.get("original_language"),
-                production_countries=cached_details.get("production_countries")
+                production_countries=cached_details.get("production_countries"),
+                media_type=movie_data.get("media_type", "movie")
             )
             tmdb_api.invalidate_db_cache()
             self._post_status_update(movie_data, new_status)

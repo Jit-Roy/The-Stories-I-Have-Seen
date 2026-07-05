@@ -22,14 +22,15 @@ class GenreCard(QWidget):
 # Worker: fetch one home-page section off the GUI thread
 # ---------------------------------------------------------------------------
 class _HomeSectionSignals(QObject):
-    finished = Signal(str, list)   # section_key, results
+    finished = Signal(str, list, str)   # section_key, results, media_type
 
 
 class _HomeSectionWorker(QRunnable):
-    def __init__(self, key: str, fetch_fn):
+    def __init__(self, key: str, fetch_fn, media_type: str):
         super().__init__()
         self.key = key
         self.fetch_fn = fetch_fn
+        self.media_type = media_type
         self.signals = _HomeSectionSignals()
 
     def run(self):
@@ -38,7 +39,7 @@ class _HomeSectionWorker(QRunnable):
         except Exception as e:
             print(f"HomeSectionWorker ({self.key}) error: {e}")
             results = []
-        self.signals.finished.emit(self.key, results)
+        self.signals.finished.emit(self.key, results, self.media_type)
 
 
 # ---------------------------------------------------------------------------
@@ -84,9 +85,15 @@ class HomePage(QWidget):
 
         self.trending_toggle = None
         self.trending_carousel = None
+        self.media_type = "movie"
 
         self._sections_pending = 0
         self.load_home_content()
+
+    def set_media_type(self, media_type):
+        self.media_type = media_type
+        self.load_home_content()
+
 
     def clear_layout(self):
         while self.content_layout.count():
@@ -101,43 +108,60 @@ class HomePage(QWidget):
         fetch_params = params.copy()
         query = fetch_params.get("query")
         title = f"Search Results: '{query}'" if query else "Discover Results"
-        self.on_view_all(title, lambda page: tmdb_api.advanced_discover(fetch_params, page=page), fetch_params)
+        self.on_view_all(title, lambda page: tmdb_api.advanced_discover(fetch_params, page=page, media_type=self.media_type), fetch_params)
 
     # ------------------------------------------------------------------
     # Async loading — launch all workers concurrently
     # ------------------------------------------------------------------
     def load_home_content(self):
         self.clear_layout()
-        self._section_slots = {"hero": None, "trending": None, "top_rated": None, "upcoming": None}
+        self._section_slots = {"hero": None, "trending": None, "popular": None, "top_rated": None, "upcoming": None}
         self.hero_carousel = None
         self.trending_toggle = None
         self.trending_carousel = None
 
-        # Insert stable placeholder widgets in display order
-        for key in ("hero", "trending", "top_rated", "upcoming"):
+        for key in ("hero", "trending", "popular", "top_rated", "upcoming"):
             placeholder = QWidget()
             placeholder.setVisible(False)
             self._section_slots[key] = placeholder
             self.content_layout.addWidget(placeholder)
         self.content_layout.addStretch()
 
-        sections = [
-            ("trending",  tmdb_api.get_trending),
-            ("upcoming",  tmdb_api.get_upcoming),
-            ("top_rated", tmdb_api.get_top_rated),
-            ("genres",    tmdb_api.get_genres),
-            ("languages", tmdb_api.get_languages),
-            ("countries", tmdb_api.get_countries),
-        ]
+        if self.media_type == "movie":
+            sections = [
+                ("trending",  tmdb_api.get_trending),
+                ("popular",   tmdb_api.get_popular),
+                ("upcoming",  tmdb_api.get_upcoming),
+                ("top_rated", tmdb_api.get_top_rated),
+                ("genres",    tmdb_api.get_genres),
+                ("languages", tmdb_api.get_languages),
+                ("countries", tmdb_api.get_countries),
+            ]
+        else:
+            sections = [
+                ("trending",  tmdb_api.get_trending_tv),
+                ("popular",   tmdb_api.get_popular_tv),
+                ("upcoming",  tmdb_api.get_upcoming_tv),
+                ("top_rated", tmdb_api.get_top_rated_tv),
+                ("genres",    tmdb_api.get_genres),
+                ("languages", tmdb_api.get_languages),
+                ("countries", tmdb_api.get_countries),
+            ]
+            
         self._sections_pending = len(sections)
 
         for key, fn in sections:
-            worker = _HomeSectionWorker(key, fn)
+            worker = _HomeSectionWorker(key, fn, self.media_type)
             worker.signals.finished.connect(self._on_section_loaded)
+            from PySide6.QtCore import QThreadPool
             QThreadPool.globalInstance().start(worker)
 
-    def _on_section_loaded(self, key: str, data: list):
+    def _on_section_loaded(self, key: str, data: list, media_type: str):
         """Called on the main thread as each worker finishes."""
+        # Prevent race conditions from stale requests
+        if media_type != self.media_type:
+            return
+            
         self._sections_pending -= 1
 
         if key == "genres":
@@ -158,6 +182,8 @@ class HomePage(QWidget):
 
         if key == "trending":
             self._build_trending(data)
+        elif key == "popular":
+            self._build_popular(data)
         elif key == "top_rated":
             self._build_top_rated(data)
         elif key == "upcoming":
@@ -195,7 +221,10 @@ class HomePage(QWidget):
 
         def fetch_trending(page=1):
             window = "day" if self.trending_toggle.current == "Today" else "week"
-            return tmdb_api.get_trending(page=page, time_window=window)
+            if self.media_type == "movie":
+                return tmdb_api.get_trending(page=page, time_window=window)
+            else:
+                return tmdb_api.get_trending_tv(page=page, time_window=window)
 
         self.trending_carousel = HorizontalCarousel(
             "Trending",
@@ -213,28 +242,41 @@ class HomePage(QWidget):
         vbox.addWidget(self.trending_carousel)
 
         self._swap_placeholder("hero", container)
+        
+    def _build_popular(self, popular):
+        fetch_fn = tmdb_api.get_popular if self.media_type == "movie" else tmdb_api.get_popular_tv
+        self.popular_carousel = HorizontalCarousel(
+            "Popular",
+            popular,
+            lambda m: MovieCard(m, self.change_status, self.on_movie_click),
+            lambda: self.on_view_all("Popular", fetch_fn),
+        )
+        self._swap_placeholder("popular", self.popular_carousel)
 
     def _build_top_rated(self, top_rated):
+        fetch_fn = tmdb_api.get_top_rated if self.media_type == "movie" else tmdb_api.get_top_rated_tv
         self.top_rated_carousel = HorizontalCarousel(
             "Top Rated",
             top_rated,
             lambda m: MovieCard(m, self.change_status, self.on_movie_click),
-            lambda: self.on_view_all("Top Rated", tmdb_api.get_top_rated),
+            lambda: self.on_view_all("Top Rated", fetch_fn),
         )
         self._swap_placeholder("top_rated", self.top_rated_carousel)
 
     def _build_upcoming(self, upcoming):
+        title = "Upcoming Releases" if self.media_type == "movie" else "On The Air"
+        fetch_fn = tmdb_api.get_upcoming if self.media_type == "movie" else tmdb_api.get_upcoming_tv
         self.upcoming_carousel = HorizontalCarousel(
-            "Upcoming Releases",
+            title,
             upcoming,
             lambda m: MovieCard(m, self.change_status, self.on_movie_click),
-            lambda: self.on_view_all("Upcoming Releases", tmdb_api.get_upcoming),
+            lambda: self.on_view_all(title, fetch_fn),
         )
         self._swap_placeholder("upcoming", self.upcoming_carousel)
 
     def refresh_carousels(self):
         # Refresh the status of movie cards in all home page carousels
-        for carousel_name in ["trending_carousel", "top_rated_carousel", "upcoming_carousel"]:
+        for carousel_name in ["trending_carousel", "popular_carousel", "top_rated_carousel", "upcoming_carousel"]:
             if hasattr(self, carousel_name):
                 carousel = getattr(self, carousel_name)
                 if carousel and hasattr(carousel, "refresh_status"):

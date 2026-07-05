@@ -12,6 +12,63 @@ import tmdb_api
 from download_manager import DownloadManager
 from PySide6.QtWidgets import QDialog, QWidget
 
+class ProfileCard(QWidget):
+    def __init__(self, cast_data, on_click_callback):
+        super().__init__()
+        self.cast_data = cast_data
+        self.on_click = on_click_callback
+        self.setFixedSize(120, 200)
+        self.setCursor(Qt.PointingHandCursor)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
+        
+        self.img_label = RoundedImage()
+        self.img_label.setFixedSize(120, 150)
+        self.img_label.setStyleSheet("background-color: #1A1C23; border-radius: 8px;")
+        layout.addWidget(self.img_label)
+        
+        name = QLabel(cast_data.get("name", ""))
+        name.setStyleSheet("color: white; font-weight: bold; font-size: 12px;")
+        name.setWordWrap(True)
+        name.setAlignment(Qt.AlignCenter)
+        layout.addWidget(name)
+        layout.addStretch()
+        
+        self.load_image()
+
+    def mousePressEvent(self, event):
+        if self.on_click:
+            self.on_click(self.cast_data.get("id"))
+        super().mousePressEvent(event)
+
+    def load_image(self):
+        p_path = self.cast_data.get("profile_path")
+        if not p_path:
+            return
+            
+        url = f"https://image.tmdb.org/t/p/w200{p_path}"
+        cached = ImageLoader.get_cached_image(url)
+        if cached:
+            self.on_image_loaded(cached)
+            return
+            
+        loader = ImageLoader(url)
+        loader.signals.finished.connect(self.on_image_loaded)
+        QThreadPool.globalInstance().start(loader)
+
+    def on_image_loaded(self, data):
+        if data:
+            pm = QImage()
+            if pm.loadFromData(data):
+                dpr = self.devicePixelRatioF()
+                target_w = int(120 * dpr)
+                target_h = int(150 * dpr)
+                pixmap = QPixmap(pm).scaled(target_w, target_h, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+                pixmap.setDevicePixelRatio(dpr)
+                self.img_label.setPixmap(pixmap)
+
 
 # ---------------------------------------------------------------------------
 # Worker: fetch movie details off the GUI thread
@@ -21,14 +78,22 @@ class _DetailWorkerSignals(QObject):
 
 
 class _DetailWorker(QRunnable):
-    def __init__(self, movie_id):
+    def __init__(self, movie_id, media_type="movie"):
         super().__init__()
         self.movie_id = movie_id
+        self.media_type = media_type
         self.signals = _DetailWorkerSignals()
 
     def run(self):
         try:
-            details = tmdb_api.get_movie_details(self.movie_id)
+            if self.media_type == "tv":
+                details = tmdb_api.get_tv_details(self.movie_id)
+            else:
+                details = tmdb_api.get_movie_details(self.movie_id)
+                
+            if details:
+                details["media_type"] = self.media_type
+                details["age_rating"] = tmdb_api.get_age_rating(self.movie_id, self.media_type)
         except Exception as e:
             print(f"DetailWorker error: {e}")
             details = None
@@ -164,11 +229,12 @@ class BackdropFrame(QFrame):
 # Main detail page
 # ---------------------------------------------------------------------------
 class MovieDetailPage(QWidget):
-    def __init__(self, go_back_callback, change_status_callback, show_movie_detail_callback):
+    def __init__(self, go_back_callback, change_status_callback, show_movie_detail_callback, show_person_detail_callback=None):
         super().__init__()
         self.go_back = go_back_callback
         self.change_status = change_status_callback
         self.show_movie_detail = show_movie_detail_callback
+        self.show_person_detail = show_person_detail_callback
         self.movie_data = None
         self._last_details = None       # cached result for change_status re-use
         self._pending_movie_id = None   # guard against stale worker responses
@@ -249,7 +315,8 @@ class MovieDetailPage(QWidget):
         self.overview_label.setWordWrap(True)
 
         action_layout = QHBoxLayout()
-        self.btn_play = QPushButton("▶   Play Movie")
+        self.btn_play = QPushButton("▶   Play")
+        self.btn_play.setFixedHeight(45)
         self.btn_play.setCursor(Qt.PointingHandCursor)
         self.btn_play.setStyleSheet("""
             QPushButton {
@@ -312,6 +379,12 @@ class MovieDetailPage(QWidget):
         self.left_column = QVBoxLayout()
         self.left_column.setAlignment(Qt.AlignTop)
 
+        self.cast_container = QWidget()
+        self.cast_layout = QVBoxLayout(self.cast_container)
+        self.cast_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_column.addWidget(self.cast_container)
+        self.left_column.addSpacing(30)
+        
         self.trailers_container = QWidget()
         self.trailers_layout = QVBoxLayout(self.trailers_container)
         self.trailers_layout.setContentsMargins(0, 0, 0, 0)
@@ -438,6 +511,7 @@ class MovieDetailPage(QWidget):
         self.overview_label.setText(movie_data.get("overview", ""))
         self.poster_label.clear()
         self.backdrop_container.clearPixmap()
+        self._clear_layout(self.cast_layout)
         self._clear_layout(self.trailers_layout)
         self._clear_layout(self.similar_layout)
         self.facts_label.setText("")
@@ -454,7 +528,8 @@ class MovieDetailPage(QWidget):
                 self.on_poster_loaded(cached)
 
         # ── Kick off the details worker (non-blocking) ────────────────
-        worker = _DetailWorker(movie_id)
+        media_type = movie_data.get("media_type", "movie")
+        worker = _DetailWorker(movie_id, media_type)
         worker.signals.finished.connect(self._on_details_loaded)
         QThreadPool.globalInstance().start(worker)
 
@@ -489,18 +564,47 @@ class MovieDetailPage(QWidget):
         runtime = details.get("runtime", 0)
         genres = ", ".join(details.get("genres", []))
         rating = round(details.get("vote_average", 0), 1)
-        self.meta_label.setText(f"{date} • {runtime} min • {genres} • ⭐ {rating}/10")
+        age_rating = details.get("age_rating")
+        age_str = f" • {age_rating}" if age_rating else ""
+        self.meta_label.setText(f"{date} • {runtime} min • {genres}{age_str} • ⭐ {rating}/10")
 
         tagline = details.get("tagline")
         self.tagline_label.setText(f'"{tagline}"' if tagline else "")
         self.tagline_label.setVisible(bool(tagline))
 
         director = details.get("director", "Unknown")
-        cast = ", ".join(details.get("cast", []))
-        self.credits_label.setText(f"<b>Director:</b> {director}<br><b>Cast:</b> {cast}")
+        self.credits_label.setText(f"<b>Director/Creator:</b> {director}")
         self.credits_label.setVisible(True)
 
         self.overview_label.setText(details.get("overview", "No overview available."))
+
+        # --- Cast ---
+        cast_details = details.get("cast_details", [])
+        if cast_details and hasattr(self, 'show_person_detail') and self.show_person_detail:
+            lbl = QLabel("Cast")
+            lbl.setStyleSheet("font-size: 20px; font-weight: bold; color: white; margin-bottom: 10px;")
+            self.cast_layout.addWidget(lbl)
+            
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            scroll.setStyleSheet("background: transparent; border: none;")
+            scroll.setFixedHeight(230)
+            
+            content = QWidget()
+            content.setStyleSheet("background: transparent;")
+            h_layout = QHBoxLayout(content)
+            h_layout.setContentsMargins(0, 0, 0, 0)
+            h_layout.setSpacing(15)
+            h_layout.setAlignment(Qt.AlignLeft)
+            
+            for c in cast_details:
+                card = ProfileCard(c, self.show_person_detail)
+                h_layout.addWidget(card)
+                
+            scroll.setWidget(content)
+            self.cast_layout.addWidget(scroll)
 
         # --- Trailers ---
         trailers = details.get("trailers", [])

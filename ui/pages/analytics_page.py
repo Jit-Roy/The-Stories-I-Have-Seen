@@ -196,10 +196,14 @@ class AnalyticsPage(QWidget):
             
         movies = database.get_movies()
         watched = [m for m in movies if m.get("status") == "watched"]
-        wishlist_count = sum(1 for m in movies if m.get("status") == "watch_later")
-        watched_count = len(watched)
         
-        if not watched and wishlist_count == 0:
+        watched_movies_count = sum(1 for m in watched if m.get("media_type", "movie") == "movie")
+        watched_tv_count = sum(1 for m in watched if m.get("media_type") == "tv")
+        
+        wishlist_movies_count = sum(1 for m in movies if m.get("status") == "watch_later" and m.get("media_type", "movie") == "movie")
+        wishlist_tv_count = sum(1 for m in movies if m.get("status") == "watch_later" and m.get("media_type") == "tv")
+        
+        if not watched and wishlist_movies_count == 0 and wishlist_tv_count == 0:
             self._render_empty_state()
             return
             
@@ -225,10 +229,10 @@ class AnalyticsPage(QWidget):
             l.setContentsMargins(0, 0, 0, 0)
             
             t = QLabel(title_text)
-            t.setStyleSheet("color: #A0AEC0; font-size: 14px; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;")
+            t.setStyleSheet("color: #A0AEC0; font-size: 13px; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;")
             
             v = QLabel(val_text)
-            v.setStyleSheet(f"color: {color}; font-size: 42px; font-weight: 800;")
+            v.setStyleSheet(f"color: {color}; font-size: 36px; font-weight: 800;")
             
             l.addWidget(t)
             l.addWidget(v)
@@ -236,9 +240,13 @@ class AnalyticsPage(QWidget):
             
         stats_layout.addWidget(create_stat_widget("Total Time Watched", f"{hours:,} Hours", "#1AE0A1"))
         stats_layout.addStretch()
-        stats_layout.addWidget(create_stat_widget("Movies Watched", f"{watched_count:,}", "#00C6FF"))
+        stats_layout.addWidget(create_stat_widget("Movies Watched", f"{watched_movies_count:,}", "#00C6FF"))
         stats_layout.addStretch()
-        stats_layout.addWidget(create_stat_widget("Wishlist Movies", f"{wishlist_count:,}", "#FF3366"))
+        stats_layout.addWidget(create_stat_widget("TV Watched", f"{watched_tv_count:,}", "#8E2DE2"))
+        stats_layout.addStretch()
+        stats_layout.addWidget(create_stat_widget("Wishlist Movies", f"{wishlist_movies_count:,}", "#FF3366"))
+        stats_layout.addStretch()
+        stats_layout.addWidget(create_stat_widget("Wishlist TV", f"{wishlist_tv_count:,}", "#F5AF19"))
         
         self.content_layout.addWidget(stats_frame)
         
@@ -280,7 +288,7 @@ class AnalyticsPage(QWidget):
                     
         # Will place at bottom (Row 3, Col 0)
         
-        # 5. Favorite Actors
+        # 5. Top Actors
         actors = {}
         for m in watched:
             cast = m.get("cast")
@@ -289,7 +297,7 @@ class AnalyticsPage(QWidget):
                     actors[a] = actors.get(a, 0) + 1
                     
         self._build_horizontal_card(
-            charts_layout, 1, 0, "Favorite Actors", actors, "#FF512F", "#F09819"
+            charts_layout, 1, 0, "Top Actors", actors, "#FF512F", "#F09819"
         )
         
         # 6. Top Directors

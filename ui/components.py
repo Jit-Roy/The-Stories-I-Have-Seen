@@ -139,15 +139,21 @@ class SegmentedToggle(QWidget):
     def _on_click(self):
         sender = self.sender()
         if sender == self.btn1 and self.current != self.opt1:
+            self.set_current(self.opt1)
+            self.toggled.emit(self.opt1)
+        elif sender == self.btn2 and self.current != self.opt2:
+            self.set_current(self.opt2)
+            self.toggled.emit(self.opt2)
+
+    def set_current(self, value):
+        if value == self.opt1 and self.current != self.opt1:
             self.current = self.opt1
             self.btn1.setStyleSheet(self._get_style(True, True))
             self.btn2.setStyleSheet(self._get_style(False, False))
-            self.toggled.emit(self.opt1)
-        elif sender == self.btn2 and self.current != self.opt2:
+        elif value == self.opt2 and self.current != self.opt2:
             self.current = self.opt2
             self.btn1.setStyleSheet(self._get_style(False, True))
             self.btn2.setStyleSheet(self._get_style(True, False))
-            self.toggled.emit(self.opt2)
 
 class HeroBanner(QWidget):
     def __init__(self, movie, on_explore, on_status_change=None):

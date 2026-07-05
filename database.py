@@ -77,10 +77,15 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
+    try:
+        cursor.execute("ALTER TABLE movies ADD COLUMN media_type TEXT DEFAULT 'movie'")
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
     conn.close()
 
-def add_movie(tmdb_id, title, poster_path, status, series_name=None, vote_average=None, release_date=None, runtime=None, genres=None, director=None, cast=None, production_companies=None, original_language=None, production_countries=None):
+def add_movie(tmdb_id, title, poster_path, status, series_name=None, vote_average=None, release_date=None, runtime=None, genres=None, director=None, cast=None, production_companies=None, original_language=None, production_countries=None, media_type='movie'):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
@@ -92,9 +97,9 @@ def add_movie(tmdb_id, title, poster_path, status, series_name=None, vote_averag
         countries_json = json.dumps(production_countries) if production_countries else None
         
         cursor.execute('''
-            INSERT INTO movies (tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres, director, "cast", production_companies, original_language, production_countries)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres_json, director, cast_json, companies_json, original_language, countries_json))
+            INSERT INTO movies (tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres, director, "cast", production_companies, original_language, production_countries, media_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres_json, director, cast_json, companies_json, original_language, countries_json, media_type))
         conn.commit()
         success = True
     except sqlite3.IntegrityError:
@@ -124,9 +129,9 @@ def get_movies(status=None):
     cursor = conn.cursor()
     
     if status:
-        cursor.execute('SELECT tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres, director, "cast", production_companies, original_language, production_countries FROM movies WHERE status = ? ORDER BY added_at DESC', (status,))
+        cursor.execute('SELECT tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres, director, "cast", production_companies, original_language, production_countries, media_type FROM movies WHERE status = ? ORDER BY added_at DESC', (status,))
     else:
-        cursor.execute('SELECT tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres, director, "cast", production_companies, original_language, production_countries FROM movies ORDER BY added_at DESC')
+        cursor.execute('SELECT tmdb_id, title, poster_path, status, series_name, vote_average, release_date, runtime, genres, director, "cast", production_companies, original_language, production_countries, media_type FROM movies ORDER BY added_at DESC')
         
     movies = cursor.fetchall()
     conn.close()
@@ -147,7 +152,8 @@ def get_movies(status=None):
             "cast": json.loads(m[10]) if m[10] else [],
             "production_companies": json.loads(m[11]) if m[11] else [],
             "original_language": m[12],
-            "production_countries": json.loads(m[13]) if m[13] else []
+            "production_countries": json.loads(m[13]) if m[13] else [],
+            "media_type": m[14] if len(m) > 14 else "movie"
         }
         for m in movies
     ]

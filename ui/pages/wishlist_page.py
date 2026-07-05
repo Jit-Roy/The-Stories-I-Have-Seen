@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 import database
 from ui.movie_card import MovieCard, SeriesFolderCard
-from ui.components import FlowLayout, ResizableScrollArea
+from ui.components import FlowLayout, ResizableScrollArea, SegmentedToggle
 from PySide6.QtCore import Qt
 
 class WishlistPage(QWidget):
@@ -26,9 +26,13 @@ class WishlistPage(QWidget):
         self.title_label = QLabel("My Wishlist")
         self.title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: white; margin-left: 10px;")
         
+        self.type_toggle = SegmentedToggle("Movies", "TV Series")
+        self.type_toggle.toggled.connect(lambda _: self.load_lists())
+        
         header_layout.addWidget(self.back_btn)
         header_layout.addWidget(self.title_label)
         header_layout.addStretch()
+        header_layout.addWidget(self.type_toggle)
         self.layout.addLayout(header_layout)
         
         self.empty_label = QLabel("Your wishlist is empty. Add movies to watch them later!")
@@ -52,11 +56,21 @@ class WishlistPage(QWidget):
             self.title_label.setText("My Wishlist")
         self.load_lists()
         
-    def load_lists(self):
+    def load_lists(self, media_type=None):
+        if media_type:
+            target = "Movies" if media_type == "movie" else "TV Series"
+            self.type_toggle.blockSignals(True)
+            self.type_toggle.set_current(target)
+            self.type_toggle.blockSignals(False)
+            
         self.flow.clear()
-        movies = database.get_movies("watch_later")
+        all_movies = database.get_movies("watch_later")
+        filter_type = "movie" if self.type_toggle.current == "Movies" else "tv"
+        movies = [m for m in all_movies if m.get("media_type", "movie") == filter_type]
         
         if not movies:
+            media_text = "movies" if filter_type == "movie" else "TV series"
+            self.empty_label.setText(f"Your wishlist is empty. Add {media_text} to watch them later!")
             self.empty_label.show()
             return
         else:
@@ -80,7 +94,7 @@ class WishlistPage(QWidget):
                 self.pending_items.append(("movie", m))
         else:
             for s_name, s_movies in series_groups.items():
-                self.pending_items.append(("folder", (s_name, len(s_movies))))
+                self.pending_items.append(("folder", (s_name, len(s_movies), filter_type)))
             for m in standalone:
                 self.pending_items.append(("movie", m))
                 
@@ -106,7 +120,7 @@ class WishlistPage(QWidget):
             if item_type == "movie":
                 self.flow.add_widget(MovieCard(data, self.change_status, self.on_movie_click))
             elif item_type == "folder":
-                self.flow.add_widget(SeriesFolderCard(data[0], data[1], self.set_series_view))
+                self.flow.add_widget(SeriesFolderCard(data[0], data[1], self.set_series_view, data[2]))
                 
         self.flow.reflow(self.scroll.viewport().width() if self.scroll.viewport() else None)
 

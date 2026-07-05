@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame
-from PySide6.QtGui import QPixmap, QImage, QPainter, QPainterPath, QColor
+from PySide6.QtGui import QPixmap, QImage, QPainter, QPainterPath, QColor, QIcon
 from PySide6.QtCore import Qt, QUrl, QRunnable, QThreadPool, Signal, QObject
 import requests
 import hashlib
@@ -210,6 +210,16 @@ class MovieCard(QWidget):
         self.title_label.setText(elided_text)
         layout.addWidget(self.title_label)
 
+        # Add TV badge
+        if self.movie_data.get("media_type") == "tv":
+            tv_badge = QLabel(self.poster_container)
+            icon = QIcon("assets/icons/tv_badge.svg")
+            tv_badge.setPixmap(icon.pixmap(14, 14))
+            tv_badge.setAlignment(Qt.AlignCenter)
+            tv_badge.setStyleSheet("background-color: transparent;")
+            tv_badge.setFixedSize(24, 24)
+            tv_badge.move(8, 8)
+
         # Info
         rating = self.movie_data.get("vote_average", "N/A")
         date = self.movie_data.get("release_date", "")[:4] if self.movie_data.get("release_date") else ""
@@ -314,10 +324,13 @@ class MovieCard(QWidget):
                 QTimer.singleShot(1000, self.load_poster)
 
 
-class SeriesFolderCard(QWidget):
-    def __init__(self, series_name, movie_count, on_click):
+class SeriesFolderCard(QFrame):
+    def __init__(self, series_name, count, on_click, media_type="movie"):
         super().__init__()
         self.series_name = series_name
+        self.count = count
+        self.on_click = on_click
+        self.media_type = media_type
         self.setObjectName("seriesFolder")
         self.setFixedSize(160, 280)
         self.setCursor(Qt.PointingHandCursor)
@@ -347,7 +360,7 @@ class SeriesFolderCard(QWidget):
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #E2E8F0; border: none; background: transparent;")
 
-        count_label = QLabel(f"{movie_count} movies")
+        count_label = QLabel(f"{self.count} items" if self.media_type == "tv" else f"{self.count} movies")
         count_label.setAlignment(Qt.AlignCenter)
         count_label.setStyleSheet("color: #1AE0A1; font-weight: bold; font-size: 13px; border: none; background: transparent;")
 
@@ -378,14 +391,15 @@ class SeriesFolderCard(QWidget):
         self.signals.finished.connect(self.on_image_loaded)
 
         class FullWorker(QRunnable):
-            def __init__(self, series, signals):
+            def __init__(self, series, media_type, signals):
                 super().__init__()
                 self.series = series
+                self.media_type = media_type
                 self.signals = signals
 
             def run(self):
                 import tmdb_api
-                url = tmdb_api.get_collection_poster(self.series)
+                url = tmdb_api.get_collection_poster(self.series, self.media_type)
                 if url:
                     loader = ImageLoader(url)
                     loader.signals = self.signals
@@ -393,7 +407,7 @@ class SeriesFolderCard(QWidget):
                 else:
                     self.signals.finished.emit(b"")
 
-        QThreadPool.globalInstance().start(FullWorker(self.series_name, self.signals))
+        QThreadPool.globalInstance().start(FullWorker(self.series_name, self.media_type, self.signals))
 
     def on_image_loaded(self, image_data):
         if image_data:

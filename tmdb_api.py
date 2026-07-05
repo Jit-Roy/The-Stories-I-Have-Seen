@@ -99,7 +99,21 @@ def _format_movie(item):
         "poster_path": f"{IMAGE_BASE_URL}{poster}" if poster else None,
         "backdrop_path": f"{BACKDROP_BASE_URL}{backdrop}" if backdrop else None,
         "release_date": item.get("release_date"),
-        "vote_average": item.get("vote_average")
+        "vote_average": item.get("vote_average"),
+        "media_type": "movie"
+    }
+
+def _format_tv(item):
+    poster = item.get("poster_path")
+    backdrop = item.get("backdrop_path")
+    return {
+        "id": item.get("id"),
+        "title": item.get("name") or item.get("title"),
+        "poster_path": f"{IMAGE_BASE_URL}{poster}" if poster else None,
+        "backdrop_path": f"{BACKDROP_BASE_URL}{backdrop}" if backdrop else None,
+        "release_date": item.get("first_air_date"),
+        "vote_average": item.get("vote_average"),
+        "media_type": "tv"
     }
 
 
@@ -122,6 +136,30 @@ def get_top_rated(page=1):
     data = _make_request("/movie/top_rated", {"language": "en-US", "page": page})
     return inject_db_status([_format_movie(m) for m in data.get("results", [])])
 
+def get_popular(page=1):
+    data = _make_request("/movie/popular", {"language": "en-US", "page": page})
+    return inject_db_status([_format_movie(m) for m in data.get("results", [])])
+
+
+def search_tv(query, page=1):
+    data = _make_request("/search/tv", {"query": query, "language": "en-US", "page": page, "include_adult": False})
+    return inject_db_status([_format_tv(m) for m in data.get("results", [])])
+
+def get_trending_tv(page=1, time_window="day"):
+    data = _make_request(f"/trending/tv/{time_window}", {"page": page})
+    return inject_db_status([_format_tv(m) for m in data.get("results", [])])
+
+def get_upcoming_tv(page=1):
+    data = _make_request("/tv/on_the_air", {"language": "en-US", "page": page})
+    return inject_db_status([_format_tv(m) for m in data.get("results", [])])
+
+def get_top_rated_tv(page=1):
+    data = _make_request("/tv/top_rated", {"language": "en-US", "page": page})
+    return inject_db_status([_format_tv(m) for m in data.get("results", [])])
+
+def get_popular_tv(page=1):
+    data = _make_request("/tv/popular", {"language": "en-US", "page": page})
+    return inject_db_status([_format_tv(m) for m in data.get("results", [])])
 
 def get_movie_details(movie_id):
     """Fetch full movie details. Results are cached for the session lifetime."""
@@ -155,6 +193,7 @@ def get_movie_details(movie_id):
 
     movie["director"] = next((member["name"] for member in crew if member.get("job") == "Director"), "Unknown")
     movie["cast"] = [member["name"] for member in cast[:10]]
+    movie["cast_details"] = [{"id": c["id"], "name": c["name"], "profile_path": c.get("profile_path"), "character": c.get("character")} for c in cast[:15]]
 
     # Videos
     videos = data.get("videos", {}).get("results", [])
@@ -167,6 +206,132 @@ def get_movie_details(movie_id):
     result = inject_db_status([movie])[0]
     _details_cache[movie_id] = result
     return result
+
+def get_tv_details(tv_id):
+    if f"tv_{tv_id}" in _details_cache:
+        return _details_cache[f"tv_{tv_id}"]
+
+    data = _make_request(f"/tv/{tv_id}", {"append_to_response": "credits,videos,similar"})
+    if not data:
+        return None
+
+    tv = _format_tv(data)
+    tv["series_name"] = data.get("name")
+    tv["genres"] = [g["name"] for g in data.get("genres", [])]
+    tv["overview"] = data.get("overview")
+    ep_run = data.get("episode_run_time", [])
+    tv["runtime"] = ep_run[0] if ep_run else None
+    tv["tagline"] = data.get("tagline", "")
+
+    tv["tmdb_status"] = data.get("status", "Unknown")
+    tv["budget"] = 0
+    tv["revenue"] = 0
+    tv["original_language"] = data.get("original_language", "").upper()
+    tv["homepage"] = data.get("homepage", "")
+    tv["production_companies"] = [c["name"] for c in data.get("production_companies", [])]
+    tv["production_countries"] = [c["iso_3166_1"] for c in data.get("production_countries", [])]
+
+    credits = data.get("credits", {})
+    crew = credits.get("crew", [])
+    cast = credits.get("cast", [])
+
+    tv["director"] = next((member["name"] for member in crew if member.get("job") in ["Executive Producer", "Creator"]), "Unknown")
+    tv["cast"] = [member["name"] for member in cast[:10]]
+    tv["cast_details"] = [{"id": c["id"], "name": c["name"], "profile_path": c.get("profile_path"), "character": c.get("character")} for c in cast[:15]]
+
+    videos = data.get("videos", {}).get("results", [])
+    tv["trailers"] = [v for v in videos if v.get("site") == "YouTube" and v.get("type") in ["Trailer", "Teaser"]]
+
+    similar_data = data.get("similar", {}).get("results", [])
+    tv["similar"] = [_format_tv(m) for m in similar_data]
+
+    result = inject_db_status([tv])[0]
+    _details_cache[f"tv_{tv_id}"] = result
+    return result
+
+def get_age_rating(media_id, media_type="movie"):
+    if media_type == "movie":
+        data = _make_request(f"/movie/{media_id}/release_dates")
+        results = data.get("results", [])
+        us_release = next((r for r in results if r["iso_3166_1"] == "US"), None)
+        if us_release:
+            dates = us_release.get("release_dates", [])
+            for d in dates:
+                if d.get("certification"):
+                    return d["certification"]
+    else:
+        data = _make_request(f"/tv/{media_id}/content_ratings")
+        results = data.get("results", [])
+        us_release = next((r for r in results if r["iso_3166_1"] == "US"), None)
+        if us_release:
+            return us_release.get("rating")
+    return None
+
+
+def get_person_details(person_id):
+    data = _make_request(f"/person/{person_id}", {"append_to_response": "combined_credits"})
+    if not data:
+        return None
+    credits = data.get("combined_credits", {})
+    cast_credits = credits.get("cast", [])
+    
+    # Sort by popularity
+    cast_credits = sorted(cast_credits, key=lambda x: x.get("popularity", 0), reverse=True)
+    
+    formatted_credits = []
+    seen_ids = set()
+    for c in cast_credits:
+        cid = c.get("id")
+        if cid in seen_ids:
+            continue
+        seen_ids.add(cid)
+        
+        if c.get("media_type") == "tv":
+            formatted_credits.append(_format_tv(c))
+        else:
+            formatted_credits.append(_format_movie(c))
+            
+    return {
+        "id": data.get("id"),
+        "name": data.get("name"),
+        "biography": data.get("biography"),
+        "profile_path": f"{IMAGE_BASE_URL}{data.get('profile_path')}" if data.get("profile_path") else None,
+        "birthday": data.get("birthday"),
+        "place_of_birth": data.get("place_of_birth"),
+        "known_for_department": data.get("known_for_department"),
+        "credits": inject_db_status(formatted_credits[:20]) # Top 20 credits
+    }
+
+def get_person_full_credits(person_id, page=1):
+    data = _make_request(f"/person/{person_id}", {"append_to_response": "combined_credits"})
+    if not data:
+        return []
+        
+    credits = data.get("combined_credits", {})
+    cast_credits = credits.get("cast", [])
+    
+    # Sort by popularity
+    cast_credits = sorted(cast_credits, key=lambda x: x.get("popularity", 0), reverse=True)
+    
+    formatted_credits = []
+    seen_ids = set()
+    for c in cast_credits:
+        cid = c.get("id")
+        if cid in seen_ids:
+            continue
+        seen_ids.add(cid)
+        
+        if c.get("media_type") == "tv":
+            formatted_credits.append(_format_tv(c))
+        else:
+            formatted_credits.append(_format_movie(c))
+            
+    # Manually paginate (20 items per page)
+    start_idx = (page - 1) * 20
+    end_idx = start_idx + 20
+    page_items = formatted_credits[start_idx:end_idx]
+    
+    return inject_db_status(page_items)
 
 
 from functools import lru_cache
@@ -196,28 +361,38 @@ def get_movies_by_genre(genre_id, page=1):
     return inject_db_status([_format_movie(m) for m in data.get("results", [])])
 
 
-def get_collection_poster(series_name):
+def get_collection_poster(series_name, media_type="movie"):
+    if media_type == "tv":
+        data_tv = _make_request("/search/tv", {"query": series_name, "language": "en-US", "page": 1})
+        results_tv = data_tv.get("results", [])
+        if results_tv and results_tv[0].get("poster_path"):
+            return f"{IMAGE_BASE_URL}{results_tv[0]['poster_path']}"
+        return None
+        
     data = _make_request("/search/collection", {"query": series_name, "language": "en-US", "page": 1})
     results = data.get("results", [])
-    if results:
-        poster = results[0].get("poster_path")
-        return f"{IMAGE_BASE_URL}{poster}" if poster else None
+    if results and results[0].get("poster_path"):
+        return f"{IMAGE_BASE_URL}{results[0]['poster_path']}"
+        
     return None
 
 
-def advanced_discover(params, page=1):
+def advanced_discover(params, page=1, media_type="movie"):
     params = params.copy()
     show_me = params.pop("show_me", None)
     query = params.pop("query", None)
+    endpoint_search = f"/search/{media_type}"
+    endpoint_discover = f"/discover/{media_type}"
+    formatter = _format_tv if media_type == "tv" else _format_movie
 
     if query:
-        cache_key = f"{query}_{params}_{show_me}"
+        cache_key = f"{query}_{params}_{show_me}_{media_type}"
         if page == 1 or cache_key not in _search_cache:
             search_params = {"query": query, "language": "en-US"}
             filtered = []
             for p in range(1, 4):
                 search_params["page"] = p
-                data = _make_request("/search/movie", search_params)
+                data = _make_request(endpoint_search, search_params)
                 raw_movies = data.get("results", [])
 
                 for m in raw_movies:
@@ -236,10 +411,13 @@ def advanced_discover(params, page=1):
                     if req_lang and m.get("original_language") != req_lang:
                         continue
 
-                    date_gte = params.get("primary_release_date.gte")
-                    date_lte = params.get("primary_release_date.lte")
+                    # Filter dates
+                    date_field = "first_air_date" if media_type == "tv" else "release_date"
+                    date_gte = params.get(f"{date_field}.gte") or params.get("primary_release_date.gte")
+                    date_lte = params.get(f"{date_field}.lte") or params.get("primary_release_date.lte")
+                    
                     if date_gte or date_lte:
-                        rel_date = m.get("release_date")
+                        rel_date = m.get(date_field)
                         if not rel_date:
                             continue
                         if date_gte and rel_date < date_gte:
@@ -257,7 +435,7 @@ def advanced_discover(params, page=1):
         filtered = _search_cache[cache_key]
         start_idx = (page - 1) * 20
         end_idx = start_idx + 20
-        results = inject_db_status([_format_movie(m) for m in filtered[start_idx:end_idx]])
+        results = inject_db_status([formatter(m) for m in filtered[start_idx:end_idx]])
 
         if show_me == "unseen":
             results = [m for m in results if m["status"] != "watched"]
@@ -265,30 +443,27 @@ def advanced_discover(params, page=1):
         return results
 
     # ── Discover (no query) ──────────────────────────────────────────────────
-    # When "unseen" filtering is active we must keep pulling TMDB pages until
-    # we have collected PAGE_SIZE post-filter results (or run out of pages).
-    # Without this, a page that contains mostly watched movies returns fewer
-    # than 20 items and the grid page incorrectly hides the "Load More" button.
     PAGE_SIZE = 20
-    MAX_PAGES_PER_CALL = 10   # safety cap to avoid infinite loops
+    MAX_PAGES_PER_CALL = 10
 
     if show_me != "unseen":
-        # Fast path: no post-filter needed, single TMDB request.
         api_params = {"language": "en-US", "page": page}
+        
+        # fix param translation for tv
+        if media_type == "tv":
+            if "primary_release_date.gte" in params:
+                params["first_air_date.gte"] = params.pop("primary_release_date.gte")
+            if "primary_release_date.lte" in params:
+                params["first_air_date.lte"] = params.pop("primary_release_date.lte")
+                
         api_params.update(params)
-        data = _make_request("/discover/movie", api_params)
-        results = inject_db_status([_format_movie(m) for m in data.get("results", [])])
+        data = _make_request(endpoint_discover, api_params)
+        results = inject_db_status([formatter(m) for m in data.get("results", [])])
         return results
 
-    # "Unseen" path: accumulate until we fill a full page.
-    # We map our logical page number to a starting TMDB page.
-    # Each logical page consumed up to MAX_PAGES_PER_CALL TMDB pages, so we
-    # store a cursor that remembers which TMDB page we left off on.
-    # We encode this in a simple cache keyed by (params_key, logical_page).
     params_key = str(sorted(params.items()))
-    cursor_key = f"__unseen_cursor_{params_key}"
+    cursor_key = f"__unseen_cursor_{params_key}_{media_type}"
     if page == 1:
-        # Reset cursor at the start of a new discover session
         _search_cache[cursor_key] = 1
 
     tmdb_page = _search_cache.get(cursor_key, 1)
@@ -297,15 +472,20 @@ def advanced_discover(params, page=1):
 
     while len(collected) < PAGE_SIZE and pages_fetched < MAX_PAGES_PER_CALL:
         api_params = {"language": "en-US", "page": tmdb_page}
+        if media_type == "tv":
+            if "primary_release_date.gte" in params:
+                params["first_air_date.gte"] = params.pop("primary_release_date.gte")
+            if "primary_release_date.lte" in params:
+                params["first_air_date.lte"] = params.pop("primary_release_date.lte")
         api_params.update(params)
-        data = _make_request("/discover/movie", api_params)
+        data = _make_request(endpoint_discover, api_params)
         raw = data.get("results", [])
         total_tmdb_pages = data.get("total_pages", 1)
 
         if not raw:
             break
 
-        batch = inject_db_status([_format_movie(m) for m in raw])
+        batch = inject_db_status([formatter(m) for m in raw])
         unseen = [m for m in batch if m["status"] != "watched"]
         collected.extend(unseen)
 
@@ -315,9 +495,7 @@ def advanced_discover(params, page=1):
         if tmdb_page > total_tmdb_pages:
             break
 
-    # Persist the cursor so the next "Load More" continues from where we left off
     _search_cache[cursor_key] = tmdb_page
-
     return collected[:PAGE_SIZE]
 # ---------------------------------------------------------------------------
 # Discovery for Analytics

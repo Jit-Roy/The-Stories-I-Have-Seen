@@ -222,7 +222,17 @@ class MovieCard(QWidget):
 
         # Info
         rating = self.movie_data.get("vote_average", "N/A")
-        date = self.movie_data.get("release_date", "")[:4] if self.movie_data.get("release_date") else ""
+        
+        raw_date = self.movie_data.get("release_date", "")
+        if raw_date and len(raw_date) >= 10:
+            try:
+                from datetime import datetime
+                date = datetime.strptime(raw_date[:10], "%Y-%m-%d").strftime("%b %d, %Y")
+            except Exception:
+                date = raw_date[:4]
+        else:
+            date = raw_date[:4] if raw_date else ""
+            
         info_text = f"⭐ {rating}   {date}"
         self.info_label = QLabel(info_text)
         self.info_label.setObjectName("movieInfo")

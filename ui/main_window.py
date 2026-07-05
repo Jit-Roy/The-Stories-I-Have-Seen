@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
             
             # Add dedicated Detail and Grid pages if applicable
             if idx in (0, 1, 2, 3, 5):
-                detail = MovieDetailPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail, self.show_person_detail)
+                detail = MovieDetailPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail, self.show_person_detail, self.show_grid_view)
                 grid = GridPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail)
                 person = PersonPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail, self.show_grid_view)
                 t_stack.addWidget(detail) # Inner Index 1

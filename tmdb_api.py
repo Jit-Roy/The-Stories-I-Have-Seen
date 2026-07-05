@@ -249,6 +249,14 @@ def get_tv_details(tv_id):
     _details_cache[f"tv_{tv_id}"] = result
     return result
 
+def get_similar_movies(movie_id, page=1):
+    data = _make_request(f"/movie/{movie_id}/similar", {"language": "en-US", "page": page})
+    return inject_db_status([_format_movie(m) for m in data.get("results", [])])
+
+def get_similar_tv(tv_id, page=1):
+    data = _make_request(f"/tv/{tv_id}/similar", {"language": "en-US", "page": page})
+    return inject_db_status([_format_tv(m) for m in data.get("results", [])])
+
 def get_age_rating(media_id, media_type="movie"):
     if media_type == "movie":
         data = _make_request(f"/movie/{media_id}/release_dates")

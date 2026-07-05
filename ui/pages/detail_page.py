@@ -17,7 +17,7 @@ class ProfileCard(QWidget):
         super().__init__()
         self.cast_data = cast_data
         self.on_click = on_click_callback
-        self.setFixedSize(120, 200)
+        self.setFixedSize(120, 230)
         self.setCursor(Qt.PointingHandCursor)
         
         layout = QVBoxLayout(self)
@@ -25,7 +25,7 @@ class ProfileCard(QWidget):
         layout.setSpacing(5)
         
         self.img_label = RoundedImage()
-        self.img_label.setFixedSize(120, 150)
+        self.img_label.setFixedSize(120, 180)
         self.img_label.setStyleSheet("background-color: #1A1C23; border-radius: 8px;")
         layout.addWidget(self.img_label)
         
@@ -64,7 +64,7 @@ class ProfileCard(QWidget):
             if pm.loadFromData(data):
                 dpr = self.devicePixelRatioF()
                 target_w = int(120 * dpr)
-                target_h = int(150 * dpr)
+                target_h = int(180 * dpr)
                 pixmap = QPixmap(pm).scaled(target_w, target_h, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
                 pixmap.setDevicePixelRatio(dpr)
                 self.img_label.setPixmap(pixmap)
@@ -229,12 +229,13 @@ class BackdropFrame(QFrame):
 # Main detail page
 # ---------------------------------------------------------------------------
 class MovieDetailPage(QWidget):
-    def __init__(self, go_back_callback, change_status_callback, show_movie_detail_callback, show_person_detail_callback=None):
+    def __init__(self, go_back_callback, change_status_callback, show_movie_detail_callback, show_person_detail_callback=None, show_grid_callback=None):
         super().__init__()
         self.go_back = go_back_callback
         self.change_status = change_status_callback
         self.show_movie_detail = show_movie_detail_callback
         self.show_person_detail = show_person_detail_callback
+        self.show_grid_view = show_grid_callback
         self.movie_data = None
         self._last_details = None       # cached result for change_status re-use
         self._pending_movie_id = None   # guard against stale worker responses
@@ -560,7 +561,15 @@ class MovieDetailPage(QWidget):
         import tmdb_api
         tmdb_api.inject_db_status([self.movie_data])
 
-        date = details.get("release_date", "")[:4]
+        raw_date = details.get("release_date", "")
+        if raw_date and len(raw_date) >= 10:
+            try:
+                from datetime import datetime
+                date = datetime.strptime(raw_date[:10], "%Y-%m-%d").strftime("%b %d, %Y")
+            except Exception:
+                date = raw_date[:4]
+        else:
+            date = raw_date[:4] if raw_date else "Unknown Date"
         runtime = details.get("runtime", 0)
         genres = ", ".join(details.get("genres", []))
         rating = round(details.get("vote_average", 0), 1)
@@ -590,7 +599,7 @@ class MovieDetailPage(QWidget):
             scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             scroll.setStyleSheet("background: transparent; border: none;")
-            scroll.setFixedHeight(230)
+            scroll.setFixedHeight(260)
             
             content = QWidget()
             content.setStyleSheet("background: transparent;")
@@ -630,10 +639,20 @@ class MovieDetailPage(QWidget):
         # --- Similar Movies ---
         similar = details.get("similar", [])
         if similar:
+            def handle_view_all():
+                if self.show_grid_view and self.movie_data:
+                    title = f"Similar to: {self.movie_data.get('title', self.movie_data.get('name', 'Unknown'))}"
+                    m_id = self.movie_data.get("id")
+                    if self.movie_data.get("media_type") == "tv":
+                        self.show_grid_view(title, lambda page=1: tmdb_api.get_similar_tv(m_id, page=page))
+                    else:
+                        self.show_grid_view(title, lambda page=1: tmdb_api.get_similar_movies(m_id, page=page))
+                        
             carousel = HorizontalCarousel(
                 "Similar Movies",
                 similar,
-                lambda m: MovieCard(m, self.change_status, self.show_movie_detail)
+                lambda m: MovieCard(m, self.change_status, self.show_movie_detail),
+                on_view_all=handle_view_all if self.show_grid_view else None
             )
             self.similar_layout.addWidget(carousel)
 

@@ -28,6 +28,8 @@ class HorizontalCarousel(QWidget):
         if on_view_all:
             view_all_btn = QPushButton("View all")
             view_all_btn.setStyleSheet("color: #1AE0A1; background: transparent; border: none; font-weight: bold;")
+            from ui.theme_manager import ThemeManager
+            view_all_btn.setStyleSheet(ThemeManager.format_style(view_all_btn.styleSheet()))
             view_all_btn.setCursor(Qt.PointingHandCursor)
             view_all_btn.clicked.connect(on_view_all)
             header_layout.addWidget(view_all_btn)
@@ -125,7 +127,8 @@ class SegmentedToggle(QWidget):
         if not is_active:
             bg = "transparent"
             color = "#A0AEC0"
-        return f"""
+        from ui.theme_manager import ThemeManager
+        return ThemeManager.format_style(f"""
             QPushButton {{
                 background-color: {bg};
                 color: {color};
@@ -134,7 +137,7 @@ class SegmentedToggle(QWidget):
                 font-weight: bold;
                 {radius}
             }}
-        """
+        """)
 
     def _on_click(self):
         sender = self.sender()
@@ -180,6 +183,8 @@ class HeroBanner(QWidget):
             QPushButton { background-color: #1AE0A1; color: #0F172A; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; }
             QPushButton:hover { background-color: #14B885; }
         """)
+        from ui.theme_manager import ThemeManager
+        explore_btn.setStyleSheet(ThemeManager.format_style(explore_btn.styleSheet()))
         explore_btn.clicked.connect(lambda: on_explore(movie))
         
         self.wishlist_btn = QPushButton()
@@ -219,6 +224,9 @@ class HeroBanner(QWidget):
                 QPushButton { background: transparent; border: 1px solid #A0AEC0; color: #A0AEC0; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; }
                 QPushButton:hover { background: rgba(255,255,255,0.1); border-color: white; color: white; }
             """)
+            
+        from ui.theme_manager import ThemeManager
+        self.wishlist_btn.setStyleSheet(ThemeManager.format_style(self.wishlist_btn.styleSheet()))
 
     def paintEvent(self, event):
         from PySide6.QtGui import QColor, QPainter, QImage, QPixmap

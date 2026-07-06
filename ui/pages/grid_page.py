@@ -59,6 +59,9 @@ class GridPage(QWidget):
         self.current_page = 1
         self.fetch_func = None
         
+        from ui.theme_manager import ThemeManager
+        ThemeManager.apply_theme_to_widget(self)
+        
     def clear_grid(self):
         self.flow_layout.clear()
                 

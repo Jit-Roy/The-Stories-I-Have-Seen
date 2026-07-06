@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel,
                                QSpacerItem, QSizePolicy, QFrame)
 from PySide6.QtCore import Qt, QTimer, Signal
 import tmdb_api
+from ui.theme_manager import ThemeManager
 
 class SettingsPage(QWidget):
     api_key_changed = Signal()
@@ -140,9 +141,57 @@ class SettingsPage(QWidget):
         btn_layout.addStretch()
 
         card_layout.addLayout(btn_layout)
-
         layout.addWidget(card)
+        
+        # Appearance Card
+        appearance_card = QFrame()
+        appearance_card.setStyleSheet("QFrame { background-color: transparent; border: none; }")
+        app_card_layout = QVBoxLayout(appearance_card)
+        app_card_layout.setContentsMargins(24, 24, 24, 24)
+        app_card_layout.setSpacing(16)
+        
+        app_title = QLabel("Appearance")
+        app_title.setStyleSheet("font-size: 18px; font-weight: 600; color: #1AE0A1;")
+        app_card_layout.addWidget(app_title)
+        
+        app_desc = QLabel("Select your preferred accent color theme. Changes are applied instantly across the entire application.")
+        app_desc.setStyleSheet("color: #A0AEC0; font-size: 13px;")
+        app_desc.setWordWrap(True)
+        app_card_layout.addWidget(app_desc)
+        
+        themes_layout = QHBoxLayout()
+        themes_layout.setSpacing(15)
+        
+        for theme_name, colors in ThemeManager.THEMES.items():
+            btn = QPushButton()
+            btn.setFixedSize(40, 40)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(theme_name)
+            primary = colors["primary"]
+            btn.setStyleSheet(f"""
+                /* NOTHEME */
+                QPushButton {{
+                    background-color: {primary};
+                    border-radius: 20px;
+                    border: 2px solid transparent;
+                }}
+                QPushButton:hover {{
+                    border: 2px solid white;
+                }}
+            """)
+            btn.clicked.connect(lambda checked=False, t=theme_name: self._change_theme(t))
+            themes_layout.addWidget(btn)
+            
+        themes_layout.addStretch()
+        app_card_layout.addLayout(themes_layout)
+        layout.addWidget(appearance_card)
+
         layout.addStretch()
+        
+        ThemeManager.apply_theme_to_widget(self)
+
+    def _change_theme(self, theme_name):
+        ThemeManager.set_theme(theme_name)
 
     def _set_edit_mode(self, editing):
         self.api_input.setReadOnly(not editing)
@@ -177,7 +226,7 @@ class SettingsPage(QWidget):
             self._set_edit_mode(False)
             
             self.status_msg.setText("✓ Saved successfully!")
-            self.status_msg.setStyleSheet("color: #1AE0A1; font-weight: 500;")
+            self.status_msg.setStyleSheet(f"color: {ThemeManager.get_color('primary')}; font-weight: 500;")
             
             # Emit signal to let MainWindow know it needs to refresh the app
             self.api_key_changed.emit()

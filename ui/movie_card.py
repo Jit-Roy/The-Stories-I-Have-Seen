@@ -259,14 +259,12 @@ class MovieCard(QWidget):
                 QPushButton {{ {base_style} background-color: rgba(26, 224, 161, 0.4); color: #1AE0A1; }}
                 QPushButton:hover {{ background-color: rgba(26, 224, 161, 0.6); color: white; }}
             """)
-            self.btn_watched.setToolTip("Remove from Watched")
         else:
             self.btn_watched.setText("✓")
             self.btn_watched.setStyleSheet(f"""
-                QPushButton {{ {base_style} background-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.8); }}
-                QPushButton:hover {{ background-color: rgba(255, 255, 255, 0.25); color: white; }}
+                QPushButton {{ {base_style} background-color: rgba(255, 255, 255, 0.1); color: #FFFFFF; }}
+                QPushButton:hover {{ background-color: rgba(255, 255, 255, 0.2); }}
             """)
-            self.btn_watched.setToolTip("Mark as Watched")
 
         if status == "watch_later":
             self.btn_later.setText("+")
@@ -274,14 +272,15 @@ class MovieCard(QWidget):
                 QPushButton {{ {base_style} font-size: 20px; background-color: rgba(26, 224, 161, 0.4); color: #1AE0A1; padding-bottom: 2px; }}
                 QPushButton:hover {{ background-color: rgba(26, 224, 161, 0.6); color: white; }}
             """)
-            self.btn_later.setToolTip("Remove from Watch Later")
         else:
             self.btn_later.setText("+")
             self.btn_later.setStyleSheet(f"""
-                QPushButton {{ {base_style} font-size: 20px; background-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.8); padding-bottom: 2px; }}
-                QPushButton:hover {{ background-color: rgba(255, 255, 255, 0.25); color: white; }}
+                QPushButton {{ {base_style} font-size: 20px; background-color: rgba(255, 255, 255, 0.1); color: #FFFFFF; padding-bottom: 2px; }}
+                QPushButton:hover {{ background-color: rgba(255, 255, 255, 0.2); }}
             """)
-            self.btn_later.setToolTip("Add to Watch Later")
+            
+        from ui.theme_manager import ThemeManager
+        ThemeManager.apply_theme_to_widget(self)
 
     def enterEvent(self, event):
         self.overlay.show()
@@ -373,12 +372,16 @@ class SeriesFolderCard(QFrame):
         count_label = QLabel(f"{self.count} items" if self.media_type == "tv" else f"{self.count} movies")
         count_label.setAlignment(Qt.AlignCenter)
         count_label.setStyleSheet("color: #1AE0A1; font-weight: bold; font-size: 13px; border: none; background: transparent;")
+        from ui.theme_manager import ThemeManager
+        count_label.setStyleSheet(ThemeManager.format_style(count_label.styleSheet()))
 
         open_btn = QPushButton("View Collection")
         open_btn.setStyleSheet("""
             QPushButton { background-color: transparent; color: #1AE0A1; border: 1.5px solid #1AE0A1; border-radius: 6px; padding: 8px 10px; font-weight: bold; font-size: 13px; }
             QPushButton:hover { background-color: rgba(26, 224, 161, 0.1); }
         """)
+        from ui.theme_manager import ThemeManager
+        open_btn.setStyleSheet(ThemeManager.format_style(open_btn.styleSheet()))
         open_btn.clicked.connect(lambda: on_click(series_name))
 
         overlay_layout.addStretch()

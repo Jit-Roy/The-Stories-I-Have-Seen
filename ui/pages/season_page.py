@@ -330,6 +330,9 @@ class SeasonPage(QWidget):
         
         self.scroll.setWidget(self.episodes_container)
         self.layout.addWidget(self.scroll)
+        
+        from ui.theme_manager import ThemeManager
+        ThemeManager.apply_theme_to_widget(self)
 
     def load_season(self, tv_id, tv_name, season_number):
         self.title_lbl.setText(f"{tv_name} - Season {season_number}")
@@ -364,3 +367,6 @@ class SeasonPage(QWidget):
         for ep in episodes:
             card = EpisodeCard(ep, tv_id, season_number, self.download_manager)
             self.episodes_layout.addWidget(card)
+            
+        from ui.theme_manager import ThemeManager
+        ThemeManager.apply_theme_to_widget(self)

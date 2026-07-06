@@ -18,7 +18,7 @@
     </mask>
   </defs>
 
-  <g mask="url(#cutout)" fill="#1AE0A1">
+  <g mask="url(#cutout)" fill="#FFD700">
     <!-- Body -->
     <rect x="130" y="205" width="270" height="180" rx="8" />
     <!-- Top clapper bar -->

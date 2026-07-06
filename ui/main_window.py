@@ -15,6 +15,7 @@ from ui.pages.season_page import SeasonPage
 from ui.pages.analytics_page import AnalyticsPage
 from ui.pages.downloads_page import DownloadsPage
 from ui.pages.settings_page import SettingsPage
+from ui.theme_manager import ThemeManager
 
 
 class TabStack(QStackedWidget):
@@ -89,7 +90,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("The Stories I Carry")
         self.setMinimumSize(1200, 800)
         from PySide6.QtGui import QIcon
-        self.setWindowIcon(QIcon("assets/icons/main_logo.ico"))
+        self.setWindowIcon(QIcon("assets/icons/main_logo.svg"))
         
         self.all_detail_pages = []
         self.all_grid_pages = []
@@ -167,6 +168,8 @@ class MainWindow(QMainWindow):
         self.collection_dirty = False
         self.wishlist_dirty = False
         self.analytics_dirty = False
+        
+        ThemeManager.apply_theme_to_app()
 
     def setup_left_sidebar(self):
         self.left_sidebar = QWidget()
@@ -185,14 +188,14 @@ class MainWindow(QMainWindow):
 
         from PySide6.QtGui import QIcon
 
-        logo_icon = QLabel()
-        logo_icon.setStyleSheet("background-color: transparent; border: none;")
-        logo_icon.setPixmap(QIcon("assets/icons/main_logo.svg").pixmap(36, 36))
+        self.logo_icon = QLabel()
+        self.logo_icon.setStyleSheet("background-color: transparent; border: none;")
+        self.logo_icon.setPixmap(QIcon("assets/icons/main_logo.svg").pixmap(36, 36))
 
         logo_text = QLabel("The Stories I Carry")
         logo_text.setStyleSheet("font-size: 15px; font-weight: bold; color: white; background-color: transparent; border: none;")
 
-        logo_layout.addWidget(logo_icon)
+        logo_layout.addWidget(self.logo_icon)
         logo_layout.addSpacing(6)
         logo_layout.addWidget(logo_text)
         logo_layout.addStretch()
@@ -304,6 +307,9 @@ class MainWindow(QMainWindow):
         self.analytics_btn.setIcon(QIcon("assets/icons/analytics_active.svg" if self.analytics_btn.isChecked() else "assets/icons/analytics.svg"))
         self.downloads_btn.setIcon(QIcon("assets/icons/downloads_active.svg" if self.downloads_btn.isChecked() else "assets/icons/downloads.svg"))
         self.settings_btn.setIcon(QIcon("assets/icons/settings_active.svg" if self.settings_btn.isChecked() else "assets/icons/settings.svg"))
+        if hasattr(self, 'logo_icon'):
+            self.logo_icon.setPixmap(QIcon("assets/icons/main_logo.svg").pixmap(36, 36))
+        self.setWindowIcon(QIcon("assets/icons/main_logo.svg"))
 
 
     def switch_page(self, index, active_btn):

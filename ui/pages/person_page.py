@@ -186,6 +186,9 @@ class PersonPage(QWidget):
             )
             self.content_layout.addWidget(self.carousel)
             
+        from ui.theme_manager import ThemeManager
+        ThemeManager.apply_theme_to_widget(self)
+            
     def refresh_status(self):
         if self.carousel and hasattr(self.carousel, "refresh_status"):
             self.carousel.refresh_status()

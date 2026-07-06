@@ -355,6 +355,9 @@ class AnalyticsPage(QWidget):
         self._build_horizontal_card(
             charts_layout, 3, 1, "Time Traveler (Decades)", decades, "#F5AF19", "#F12711"
         )
+        
+        from ui.theme_manager import ThemeManager
+        ThemeManager.apply_theme_to_widget(self)
 
     def _build_horizontal_card(self, grid, row, col, title, data_dict, grad_start, grad_end):
         top_items = sorted(data_dict.items(), key=lambda x: x[1], reverse=True)[:10]

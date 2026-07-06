@@ -27,6 +27,14 @@ def init_db():
         )
     ''')
     
+    # Create settings table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
+    
     # Simple migration: try adding the series_name column in case the db is older
     try:
         cursor.execute('ALTER TABLE movies ADD COLUMN series_name TEXT')
@@ -166,5 +174,20 @@ def set_series(tmdb_id, series_name):
     cursor.execute('''
         UPDATE movies SET series_name = ? WHERE tmdb_id = ?
     ''', (series_name, tmdb_id))
+    conn.commit()
+    conn.close()
+
+def get_setting(key, default=None):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else default
+
+def set_setting(key, value):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))
     conn.commit()
     conn.close()

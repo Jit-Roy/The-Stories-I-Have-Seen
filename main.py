@@ -26,8 +26,11 @@ def main():
 
     app = QApplication(sys.argv)
     
+    from ui.theme_manager import ThemeManager
+    ThemeManager.load_theme()
+    
     # Set the runtime window icon
-    app.setWindowIcon(QIcon("assets/icons/main_logo.ico"))
+    app.setWindowIcon(QIcon("assets/icons/main_logo.svg"))
     
     # Base global styles
     app.setStyleSheet("""

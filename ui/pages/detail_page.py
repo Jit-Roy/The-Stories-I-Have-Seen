@@ -8,6 +8,7 @@ from ui.movie_card import RoundedImage, ImageLoader, MovieCard
 from ui.components import HorizontalCarousel
 from ui.stream_dialog import StreamSelectionDialog
 from ui.chrome_sniffer import ChromeSnifferDialog
+
 import tmdb_api
 from download_manager import DownloadManager
 from PySide6.QtWidgets import QDialog, QWidget
@@ -141,7 +142,8 @@ class AnimatedDownloadButton(QPushButton):
         rect = self.rect()
         
         if self.state == "loading":
-            pen = QPen(QColor("#1AE0A1"))
+            from ui.theme_manager import ThemeManager
+            pen = QPen(QColor(ThemeManager.get_color("primary")))
             pen.setWidth(3)
             pen.setCapStyle(Qt.RoundCap)
             painter.setPen(pen)
@@ -159,7 +161,8 @@ class AnimatedDownloadButton(QPushButton):
             ring_rect = QRectF(margin, margin, rect.width() - 2*margin, rect.height() - 2*margin)
             painter.drawEllipse(ring_rect)
             
-            pen_fg = QPen(QColor("#1AE0A1"))
+            from ui.theme_manager import ThemeManager
+            pen_fg = QPen(QColor(ThemeManager.get_color("primary")))
             pen_fg.setWidth(3)
             pen_fg.setCapStyle(Qt.RoundCap)
             painter.setPen(pen_fg)
@@ -321,15 +324,17 @@ class MovieDetailPage(QWidget):
         self.btn_play.setFixedHeight(45)
         self.btn_play.setCursor(Qt.PointingHandCursor)
         self.btn_play.setStyleSheet("""
+            /* COMPLEMENTARY */
             QPushButton {
-                background-color: #E50914; color: white; border-radius: 6px;
+                background-color: #FF2A6C; color: #0F172A; border-radius: 6px;
                 padding: 10px 24px; font-weight: bold; font-size: 14px; border: none;
             }
-            QPushButton:hover { background-color: #F40612; }
+            QPushButton:hover { background-color: #FF2A6C; }
         """)
         self.btn_play.clicked.connect(self.play_movie)
 
         self.btn_watched = QPushButton("Mark Watched")
+        self.btn_watched.setFixedHeight(45)
         self.btn_watched.setCursor(Qt.PointingHandCursor)
         self.btn_watched.clicked.connect(
             lambda: self.change_status(
@@ -339,6 +344,7 @@ class MovieDetailPage(QWidget):
         )
 
         self.btn_later = QPushButton("Watch Later")
+        self.btn_later.setFixedHeight(45)
         self.btn_later.setCursor(Qt.PointingHandCursor)
         self.btn_later.clicked.connect(
             lambda: self.change_status(
@@ -346,7 +352,7 @@ class MovieDetailPage(QWidget):
                 "remove" if self.movie_data.get("status") == "watch_later" else "watch_later"
             )
         )
-
+        
         action_layout.addWidget(self.btn_play)
         action_layout.addWidget(self.btn_watched)
         action_layout.addWidget(self.btn_later)
@@ -459,6 +465,8 @@ class MovieDetailPage(QWidget):
                 url = f"https://vidsrc.sbs/embed/movie/{tmdb_id}"
             print(f"[Player] Opening system browser: {url}")
             webbrowser.open(url)
+
+
 
     def download_movie(self):
         if not self.movie_data:
@@ -748,10 +756,14 @@ class MovieDetailPage(QWidget):
         <p><b>Studios</b><br>{companies}</p>
         """
         if details.get("homepage"):
-            facts_html += f'<p><b>Homepage</b><br><a href="{details["homepage"]}" style="color: #1AE0A1;">Visit Site</a></p>'
+            from ui.theme_manager import ThemeManager
+            primary = ThemeManager.get_color("primary")
+            facts_html += f'<p><b>Homepage</b><br><a href="{details["homepage"]}" style="color: {primary};">Visit Site</a></p>'
 
         self.facts_label.setText(facts_html)
         self.facts_label.setOpenExternalLinks(True)
+        
+
 
         self.update_buttons()
 
@@ -764,29 +776,40 @@ class MovieDetailPage(QWidget):
         if status == "watched":
             self.btn_watched.setText("✓ Watched")
             self.btn_watched.setStyleSheet("""
-                QPushButton { background-color: #14B885; color: #0F172A; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 14px; border: none; }
+                QPushButton { background-color: #14B885; color: #0F172A; border-radius: 6px; padding: 10px 24px; font-weight: bold; font-size: 14px; border: none; }
                 QPushButton:hover { background-color: #1AE0A1; }
             """)
         else:
             self.btn_watched.setText("Mark Watched")
             self.btn_watched.setStyleSheet("""
-                QPushButton { background-color: #1AE0A1; color: #0F172A; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 14px; border: none; }
-                QPushButton:hover { background-color: #14B885; }
+                QPushButton { background-color: #1AE0A1; color: #0F172A; border-radius: 6px; padding: 10px 24px; font-weight: bold; font-size: 14px; border: none; }
+                QPushButton:hover { background-color: #1AE0A1; }
             """)
 
         if status == "watch_later":
             self.btn_later.setText("✓ Watch Later")
             self.btn_later.setStyleSheet("""
-                QPushButton { background-color: transparent; color: #1AE0A1; border: 1.5px solid #1AE0A1; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 14px; }
+                QPushButton { background-color: transparent; color: #1AE0A1; border: 1.5px solid #1AE0A1; border-radius: 6px; padding: 10px 24px; font-weight: bold; font-size: 14px; }
                 QPushButton:hover { background-color: rgba(26, 224, 161, 0.1); }
             """)
         else:
             self.btn_later.setText("Watch Later")
             self.btn_later.setStyleSheet("""
-                QPushButton { background-color: transparent; color: white; border: 1.5px solid rgba(255,255,255,0.6); border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 14px; }
+                QPushButton { background-color: transparent; color: white; border: 1.5px solid rgba(255,255,255,0.6); border-radius: 6px; padding: 10px 24px; font-weight: bold; font-size: 14px; }
                 QPushButton:hover { background-color: rgba(255,255,255,0.1); border-color: white; color: white; }
             """)
-
+        from ui.theme_manager import ThemeManager
+        play_color = ThemeManager.get_color("complementary")
+        self.btn_play.setStyleSheet(f"""
+            /* COMPLEMENTARY */
+            QPushButton {{
+                background-color: {play_color}; color: #0F172A; border-radius: 6px;
+                padding: 10px 24px; font-weight: bold; font-size: 14px; border: none;
+            }}
+            QPushButton:hover {{ background-color: {play_color}; opacity: 0.9; }}
+        """)
+        
+        ThemeManager.apply_theme_to_widget(self)
         # Download button state
         tmdb_id = self.movie_data.get("id") if self.movie_data else None
         if tmdb_id:

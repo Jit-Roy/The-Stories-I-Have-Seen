@@ -184,7 +184,13 @@ class DownloadManager(QObject):
                     self.active_downloads[int(k)] = {
                         "movie_data": v.get("movie_data", {}),
                         "status": v.get("status", "Unknown"),
-                        "percent": v.get("percent", 0.0)
+                        "percent": v.get("percent", 0.0),
+                        "m3u8_url": v.get("m3u8_url"),
+                        "page_url": v.get("page_url"),
+                        "audio_format_id": v.get("audio_format_id"),
+                        "subtitle_lang": v.get("subtitle_lang"),
+                        "cookies": v.get("cookies"),
+                        "headers": v.get("headers")
                     }
                     if self.active_downloads[int(k)]["status"] not in ("Completed", "Download Failed", "Error") and not self.active_downloads[int(k)]["status"].startswith("Error"):
                         self.active_downloads[int(k)]["status"] = "Paused"
@@ -198,7 +204,13 @@ class DownloadManager(QObject):
             history[str(k)] = {
                 "movie_data": v.get("movie_data", {}),
                 "status": v.get("status", "Unknown"),
-                "percent": v.get("percent", 0.0)
+                "percent": v.get("percent", 0.0),
+                "m3u8_url": v.get("m3u8_url"),
+                "page_url": v.get("page_url"),
+                "audio_format_id": v.get("audio_format_id"),
+                "subtitle_lang": v.get("subtitle_lang"),
+                "cookies": v.get("cookies"),
+                "headers": v.get("headers")
             }
         try:
             with open(self.history_file, "w", encoding="utf-8") as f:
@@ -265,13 +277,23 @@ class DownloadManager(QObject):
             "status": "Initializing...", 
             "percent": 0, 
             "ETA": "Calculating...", 
-            "speed": "0 KiB/s"
+            "speed": "0 KiB/s",
+            "m3u8_url": url,
+            "page_url": page_url,
+            "audio_format_id": audio_format_id,
+            "subtitle_lang": subtitle_lang,
+            "cookies": cookies,
+            "headers": headers
         })
         
         abort_event = threading.Event()
         self.abort_events[tmdb_id] = abort_event
         
-        prefix = f"{item.get('title', 'Unknown')} ({item.get('year', '')})"
+        year = item.get('year', '')
+        if year:
+            prefix = f"{item.get('title', 'Unknown')} ({year})"
+        else:
+            prefix = f"{item.get('title', 'Unknown')}"
         prefix = prefix.replace(":", " -").replace("/", "-").replace("\\", "-")
         
         worker = DownloadWorker(tmdb_id, url, page_url, audio_format_id, subtitle_lang, self.download_path, abort_event, filename_prefix=prefix, cookies=cookies, headers=headers)
@@ -300,12 +322,59 @@ class DownloadManager(QObject):
                 self.save_history()
 
     def resume_download(self, tmdb_id):
-        # We can't actually resume because we don't save the m3u8_url in history yet.
-        # But for now, we'll just set status.
         if tmdb_id in self.active_downloads:
             dl_info = self.active_downloads[tmdb_id]
-            dl_info["status"] = "Error: Restart required"
-            self.status_updated.emit(tmdb_id, "Error: Restart required")
+            url = dl_info.get("m3u8_url")
+            
+            if not url:
+                dl_info["status"] = "Error: Stream expired, please restart"
+                self.status_updated.emit(tmdb_id, dl_info["status"])
+                return
+                
+            abort_event = threading.Event()
+            self.abort_events[tmdb_id] = abort_event
+            
+            item = dl_info["movie_data"]
+            year = item.get('year', '')
+            if year:
+                prefix = f"{item.get('title', 'Unknown')} ({year})"
+            else:
+                prefix = f"{item.get('title', 'Unknown')}"
+            prefix = prefix.replace(":", " -").replace("/", "-").replace("\\", "-")
+            
+            worker = DownloadWorker(
+                tmdb_id, 
+                url, 
+                dl_info.get("page_url"), 
+                dl_info.get("audio_format_id"), 
+                dl_info.get("subtitle_lang"), 
+                self.download_path, 
+                abort_event, 
+                filename_prefix=prefix, 
+                cookies=dl_info.get("cookies"), 
+                headers=dl_info.get("headers")
+            )
+            
+            dl_info.update({
+                "status": "Resuming...",
+                "worker": worker,
+                "abort_event": abort_event
+            })
+            self.save_history()
+            self.status_updated.emit(tmdb_id, "Resuming...")
+            
+            worker.signals.progress.connect(self._on_worker_progress)
+            worker.signals.finished.connect(self._on_worker_finished)
+            QThreadPool.globalInstance().start(worker)
+
+    def remove_download(self, tmdb_id):
+        if tmdb_id in self.active_downloads:
+            abort_event = self.abort_events.get(tmdb_id)
+            if abort_event:
+                abort_event.set()
+                del self.abort_events[tmdb_id]
+            del self.active_downloads[tmdb_id]
+            self.save_history()
 
     def _on_worker_progress(self, tmdb_id, data):
         if tmdb_id not in self.active_downloads:
@@ -331,17 +400,18 @@ class DownloadManager(QObject):
     def _on_worker_finished(self, tmdb_id, success, error_msg):
         if tmdb_id in self.active_downloads:
             dl_info = self.active_downloads[tmdb_id]
-            if not success and "Download was paused" in str(error_msg):
-                dl_info["status"] = "Paused"
-                self.status_updated.emit(tmdb_id, "Paused")
-                self.save_history()
-                return
-                
-            dl_info["status"] = "Completed" if success else f"Error: {error_msg}"
-            if not success:
-                import traceback
-                with open("download_error.log", "w") as f:
-                    f.write(f"Download Error for {tmdb_id}:\n{error_msg}\n")
+            if success:
+                dl_info["status"] = "Completed"
+                dl_info["percent"] = 100
+            else:
+                if "Download was paused" in str(error_msg):
+                    dl_info["status"] = "Paused"
+                elif "403" in str(error_msg) or "Forbidden" in str(error_msg):
+                    dl_info["status"] = "Error: Stream expired, please restart"
+                else:
+                    dl_info["status"] = f"Download Failed"
+
+
             if success:
                 dl_info["percent"] = 100.0
                 import glob

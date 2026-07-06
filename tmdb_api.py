@@ -256,6 +256,7 @@ def get_tv_details(tv_id):
     tv = _format_tv(data)
     tv["series_name"] = data.get("name")
     tv["genres"] = [g["name"] for g in data.get("genres", [])]
+    tv["seasons"] = data.get("seasons", [])
     tv["overview"] = data.get("overview")
     ep_run = data.get("episode_run_time", [])
     tv["runtime"] = ep_run[0] if ep_run else None
@@ -305,6 +306,10 @@ def get_recommended_movies(movie_id, page=1):
 def get_recommended_tv(tv_id, page=1):
     data = _make_request(f"/tv/{tv_id}/recommendations", {"language": "en-US", "page": page})
     return inject_db_status([_format_tv(m) for m in data.get("results", [])])
+
+def get_tv_season_details(tv_id, season_number):
+    data = _make_request(f"/tv/{tv_id}/season/{season_number}")
+    return data
 
 def get_age_rating(media_id, media_type="movie"):
     if media_type == "movie":

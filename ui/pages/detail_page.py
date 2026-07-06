@@ -229,13 +229,14 @@ class BackdropFrame(QFrame):
 # Main detail page
 # ---------------------------------------------------------------------------
 class MovieDetailPage(QWidget):
-    def __init__(self, go_back_callback, change_status_callback, show_movie_detail_callback, show_person_detail_callback=None, show_grid_callback=None):
+    def __init__(self, go_back_callback, change_status_callback, show_movie_detail_callback, show_person_detail_callback=None, show_grid_callback=None, show_season_detail_callback=None):
         super().__init__()
         self.go_back = go_back_callback
         self.change_status = change_status_callback
         self.show_movie_detail = show_movie_detail_callback
         self.show_person_detail = show_person_detail_callback
         self.show_grid_view = show_grid_callback
+        self.show_season_detail = show_season_detail_callback
         self.movie_data = None
         self._last_details = None       # cached result for change_status re-use
         self._pending_movie_id = None   # guard against stale worker responses
@@ -392,6 +393,11 @@ class MovieDetailPage(QWidget):
         self.left_column.addWidget(self.trailers_container)
         self.left_column.addSpacing(30)
 
+        self.seasons_container = QWidget()
+        self.seasons_layout = QVBoxLayout(self.seasons_container)
+        self.seasons_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_column.addWidget(self.seasons_container)
+
         self.similar_container = QWidget()
         self.similar_layout = QVBoxLayout(self.similar_container)
         self.similar_layout.setContentsMargins(0, 0, 0, 0)
@@ -538,6 +544,7 @@ class MovieDetailPage(QWidget):
         self.backdrop_container.clearPixmap()
         self._clear_layout(self.cast_layout)
         self._clear_layout(self.trailers_layout)
+        self._clear_layout(self.seasons_layout)
         self._clear_layout(self.similar_layout)
         self._clear_layout(self.recommendations_layout)
         self.facts_label.setText("")
@@ -660,6 +667,23 @@ class MovieDetailPage(QWidget):
                 btn.clicked.connect(lambda _, k=key: QDesktopServices.openUrl(QUrl(f"https://www.youtube.com/watch?v={k}")))
                 trailer_btns_layout.addWidget(btn)
             self.trailers_layout.addLayout(trailer_btns_layout)
+
+        # --- Seasons ---
+        seasons = details.get("seasons", [])
+        if seasons:
+            def on_season_click(season):
+                if hasattr(self, 'show_season_detail') and self.show_season_detail:
+                    tv_name = self.movie_data.get("title", self.movie_data.get("name", "Unknown"))
+                    self.show_season_detail(self.movie_data.get("id"), tv_name, season.get("season_number", 1))
+
+            from ui.season_card import SeasonCard
+            carousel = HorizontalCarousel(
+                "Seasons",
+                seasons,
+                lambda s: SeasonCard(s, on_click_callback=on_season_click),
+                on_view_all=None
+            )
+            self.seasons_layout.addWidget(carousel)
 
         similar = details.get("similar", [])
         if similar:

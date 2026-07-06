@@ -11,6 +11,7 @@ from ui.pages.wishlist_page import WishlistPage
 from ui.pages.detail_page import MovieDetailPage
 from ui.pages.grid_page import GridPage
 from ui.pages.person_page import PersonPage
+from ui.pages.season_page import SeasonPage
 from ui.pages.analytics_page import AnalyticsPage
 from ui.pages.downloads_page import DownloadsPage
 from ui.pages.settings_page import SettingsPage
@@ -26,6 +27,7 @@ class TabStack(QStackedWidget):
         self.detail_page = None
         self.grid_page = None
         self.person_page = None
+        self.season_page = None
 
 
 # ---------------------------------------------------------------------------
@@ -136,15 +138,18 @@ class MainWindow(QMainWindow):
             
             # Add dedicated Detail and Grid pages if applicable
             if idx in (0, 1, 2, 3, 4, 5):
-                detail = MovieDetailPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail, self.show_person_detail, self.show_grid_view)
+                detail = MovieDetailPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail, self.show_person_detail, self.show_grid_view, self.show_season_detail)
                 grid = GridPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail)
                 person = PersonPage(self.go_back_to_previous_page, self.change_status, self.show_movie_detail, self.show_grid_view)
+                season = SeasonPage(self.go_back_to_previous_page)
                 t_stack.addWidget(detail) # Inner Index 1
                 t_stack.addWidget(grid)   # Inner Index 2
                 t_stack.addWidget(person) # Inner Index 3
+                t_stack.addWidget(season) # Inner Index 4
                 t_stack.detail_page = detail
                 t_stack.grid_page = grid
                 t_stack.person_page = person
+                t_stack.season_page = season
                 self.all_detail_pages.append(detail)
                 self.all_grid_pages.append(grid)
                 
@@ -364,6 +369,17 @@ class MainWindow(QMainWindow):
         t_stack.person_page.person_id = person_id
         t_stack.person_page.load_person(person_id)
         t_stack.setCurrentIndex(3)
+
+    def show_season_detail(self, tv_id, tv_name, season_number):
+        t_stack = self.main_stack.currentWidget()
+        if not isinstance(t_stack, TabStack) or not t_stack.season_page: return
+        
+        current_index = t_stack.currentIndex()
+        state = t_stack.detail_page.movie_data if current_index == 1 else None
+        t_stack.page_history.append((current_index, state))
+        
+        t_stack.season_page.load_season(tv_id, tv_name, season_number)
+        t_stack.setCurrentIndex(4)
 
     def show_movie_detail(self, movie_data):
         t_stack = self.main_stack.currentWidget()

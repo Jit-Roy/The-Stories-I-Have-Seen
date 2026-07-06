@@ -60,6 +60,7 @@ class DownloadItemWidget(QFrame):
         # Status Label
         self.status_label = QLabel("Initializing...")
         self.status_label.setStyleSheet("color: #aaa; font-size: 14px;")
+        self.status_label.setWordWrap(True)
         details_layout.addWidget(self.status_label)
         
         # Progress Bar
@@ -92,6 +93,8 @@ class DownloadItemWidget(QFrame):
         actions_layout = QVBoxLayout()
         actions_layout.addStretch()
         
+        actions_inner_layout = QHBoxLayout()
+        
         self.action_btn = QPushButton("Pause")
         self.action_btn.setFixedSize(100, 36)
         self.action_btn.setStyleSheet("""
@@ -106,12 +109,37 @@ class DownloadItemWidget(QFrame):
                 background-color: rgba(255, 255, 255, 30);
             }
         """)
-        actions_layout.addWidget(self.action_btn)
+        actions_inner_layout.addWidget(self.action_btn)
+        
+        self.delete_btn = QPushButton("Delete")
+        self.delete_btn.setFixedSize(100, 36)
+        self.delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(255, 68, 68, 0.1);
+                color: #ff4444;
+                border: 1px solid rgba(255, 68, 68, 0.3);
+                border-radius: 18px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 68, 68, 0.2);
+            }
+        """)
+        actions_inner_layout.addWidget(self.delete_btn)
+        
+        actions_layout.addLayout(actions_inner_layout)
         actions_layout.addStretch()
         
         layout.addLayout(actions_layout)
         
         self.action_btn.clicked.connect(self.toggle_pause)
+        self.delete_btn.clicked.connect(self.delete_item)
+
+    def delete_item(self):
+        manager = DownloadManager()
+        manager.remove_download(self.tmdb_id)
+        self.hide()
+        self.deleteLater()
 
     def toggle_pause(self):
         manager = DownloadManager()
@@ -258,6 +286,7 @@ class DownloadsPage(QWidget):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll_area.setStyleSheet("""
             QScrollArea {
                 border: none;
@@ -311,7 +340,6 @@ class DownloadsPage(QWidget):
         self.manager.download_started.connect(self.on_download_started)
         self.manager.progress_updated.connect(self.on_progress_updated)
         self.manager.status_updated.connect(self.on_status_updated)
-        self.manager.download_finished.connect(self.on_download_finished)
         
     def on_download_started(self, tmdb_id, dl_info):
         self.empty_label.hide()
@@ -322,13 +350,14 @@ class DownloadsPage(QWidget):
             
     def on_progress_updated(self, tmdb_id, dl_info):
         if tmdb_id in self.items:
-            self.items[tmdb_id].update_progress(dl_info)
+            try:
+                self.items[tmdb_id].update_progress(dl_info)
+            except RuntimeError:
+                del self.items[tmdb_id]
             
     def on_status_updated(self, tmdb_id, status):
         if tmdb_id in self.items:
-            self.items[tmdb_id].update_status(status)
-            
-    def on_download_finished(self, tmdb_id, success, error_msg):
-        if tmdb_id in self.items:
-            status = "Completed" if success else f"Error: {error_msg}"
-            self.items[tmdb_id].update_status(status)
+            try:
+                self.items[tmdb_id].update_status(status)
+            except RuntimeError:
+                del self.items[tmdb_id]

@@ -10,6 +10,75 @@ from PySide6.QtGui import QPixmap, QIcon, QImage
 from download_manager import DownloadManager
 from ui.movie_card import ImageLoader
 
+class CircularProgressPoster(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(80, 120)
+        self.progress = 0
+        self.status = "Initializing..."
+        self.pixmap = None
+        self.check_icon = QIcon("assets/icons/check_circle.svg")
+        
+    def setPixmap(self, pixmap):
+        self.pixmap = pixmap
+        self.update()
+        
+    def setProgress(self, progress, status):
+        self.progress = progress
+        self.status = status
+        self.update()
+        
+    def paintEvent(self, event):
+        from PySide6.QtGui import QPainter, QPainterPath, QColor, QPen, QBrush
+        from PySide6.QtCore import QRectF, Qt
+        
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, self.width(), self.height(), 8, 8)
+        painter.setClipPath(path)
+        
+        if self.pixmap:
+            painter.drawPixmap(self.rect(), self.pixmap)
+        else:
+            painter.fillRect(self.rect(), QColor("#222"))
+            
+        if self.status == "Completed":
+            # Just draw the check icon slightly overlaid
+            icon_pixmap = self.check_icon.pixmap(32, 32)
+            # Center it
+            x = (self.width() - 32) // 2
+            y = (self.height() - 32) // 2
+            painter.fillRect(self.rect(), QColor(0, 0, 0, 100))
+            painter.drawPixmap(x, y, icon_pixmap)
+        else:
+            painter.fillRect(self.rect(), QColor(0, 0, 0, 150))
+            
+            if self.status.startswith("Error"):
+                color = QColor("#ff4444")
+            elif self.status == "Paused":
+                color = QColor("#ff9800")
+            else:
+                color = QColor("#14B885")
+                
+            ring_rect = QRectF(20, 40, 40, 40)
+            
+            pen_track = QPen(QColor(255, 255, 255, 30), 4)
+            pen_track.setCapStyle(Qt.RoundCap)
+            painter.setPen(pen_track)
+            painter.drawArc(ring_rect, 0, 360 * 16)
+            
+            pen_prog = QPen(color, 4)
+            pen_prog.setCapStyle(Qt.RoundCap)
+            painter.setPen(pen_prog)
+            
+            span_angle = int((self.progress / 100.0) * 360 * 16)
+            painter.drawArc(ring_rect, 90 * 16, -span_angle)
+            
+        painter.end()
+
+
 class DownloadItemWidget(QFrame):
     def __init__(self, tmdb_id, movie_data, parent=None):
         super().__init__(parent)
@@ -19,13 +88,13 @@ class DownloadItemWidget(QFrame):
         self.setObjectName("DownloadItem")
         self.setStyleSheet("""
             QFrame#DownloadItem {
-                background-color: transparent;
+                background-color: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: 12px;
-                border: none;
             }
             QFrame#DownloadItem:hover {
-                background-color: rgba(255, 255, 255, 5);
-                border: none;
+                background-color: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
             }
         """)
         
@@ -38,53 +107,44 @@ class DownloadItemWidget(QFrame):
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setAlignment(Qt.AlignTop)
         layout.setSpacing(20)
-        layout.setSpacing(20)
         
         # Poster
-        self.poster_label = QLabel()
-        self.poster_label.setFixedSize(80, 120)
-        self.poster_label.setStyleSheet("border-radius: 8px; background-color: #222;")
-        self.poster_label.setScaledContents(True)
+        self.poster_label = CircularProgressPoster()
         layout.addWidget(self.poster_label, alignment=Qt.AlignTop)
         
         # Details Layout
         details_layout = QVBoxLayout()
         details_layout.setSpacing(8)
         
-        # Title
+        # Title & Meta Header
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(10)
+        
         title = self.movie_data.get("title", "Unknown Title")
         self.title_label = QLabel(title)
-        self.title_label.setStyleSheet("color: white; font-size: 18px; font-weight: bold;")
-        details_layout.addWidget(self.title_label)
+        self.title_label.setStyleSheet("color: white; font-size: 20px; font-weight: bold;")
+        header_layout.addWidget(self.title_label)
+        
+        self.meta_badge = QLabel("")
+        self.meta_badge.setStyleSheet("""
+            background-color: rgba(255, 255, 255, 0.05);
+            color: #ccc;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 4px 10px;
+            border-radius: 12px;
+        """)
+        self.meta_badge.hide()
+        header_layout.addWidget(self.meta_badge)
+        header_layout.addStretch()
+        
+        details_layout.addLayout(header_layout)
         
         # Status Label
         self.status_label = QLabel("Initializing...")
         self.status_label.setStyleSheet("color: #aaa; font-size: 14px;")
         self.status_label.setWordWrap(True)
         details_layout.addWidget(self.status_label)
-        
-        # Progress Bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setFixedHeight(8)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: none;
-                border-radius: 4px;
-                background-color: rgba(255, 255, 255, 10);
-            }
-            QProgressBar::chunk {
-                background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 #14B885, stop:1 #1AE0A1);
-                border-radius: 4px;
-            }
-        """)
-        self.progress_bar.setValue(0)
-        details_layout.addWidget(self.progress_bar)
-        
-        # Meta info (Speed / ETA)
-        self.meta_label = QLabel("")
-        self.meta_label.setStyleSheet("color: #888; font-size: 12px;")
-        details_layout.addWidget(self.meta_label)
         
         details_layout.addStretch()
         layout.addLayout(details_layout)
@@ -94,35 +154,40 @@ class DownloadItemWidget(QFrame):
         actions_layout.addStretch()
         
         actions_inner_layout = QHBoxLayout()
+        actions_inner_layout.setSpacing(12)
         
-        self.action_btn = QPushButton("Pause")
-        self.action_btn.setFixedSize(100, 36)
+        self.action_btn = QPushButton()
+        self.action_btn.setFixedSize(40, 40)
+        self.action_btn.setCursor(Qt.PointingHandCursor)
+        self.action_btn.setIconSize(QSize(22, 22))
+        self.action_btn.setToolTip("Pause")
+        self.action_btn.setIcon(QIcon("assets/icons/pause.svg"))
         self.action_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(255, 255, 255, 10);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 20);
-                border-radius: 18px;
-                font-weight: bold;
+                background-color: transparent;
+                border: none;
+                border-radius: 20px;
             }
             QPushButton:hover {
-                background-color: rgba(255, 255, 255, 30);
+                background-color: rgba(255, 255, 255, 0.1);
             }
         """)
         actions_inner_layout.addWidget(self.action_btn)
         
-        self.delete_btn = QPushButton("Delete")
-        self.delete_btn.setFixedSize(100, 36)
+        self.delete_btn = QPushButton()
+        self.delete_btn.setFixedSize(40, 40)
+        self.delete_btn.setCursor(Qt.PointingHandCursor)
+        self.delete_btn.setIconSize(QSize(22, 22))
+        self.delete_btn.setToolTip("Delete")
+        self.delete_btn.setIcon(QIcon("assets/icons/trash.svg"))
         self.delete_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(255, 68, 68, 0.1);
-                color: #ff4444;
-                border: 1px solid rgba(255, 68, 68, 0.3);
-                border-radius: 18px;
-                font-weight: bold;
+                background-color: transparent;
+                border: none;
+                border-radius: 20px;
             }
             QPushButton:hover {
-                background-color: rgba(255, 68, 68, 0.2);
+                background-color: rgba(255, 68, 68, 0.1);
             }
         """)
         actions_inner_layout.addWidget(self.delete_btn)
@@ -143,13 +208,14 @@ class DownloadItemWidget(QFrame):
 
     def toggle_pause(self):
         manager = DownloadManager()
-        if self.action_btn.text() == "Pause":
+        if self.action_btn.toolTip() == "Pause":
             manager.pause_download(self.tmdb_id)
-        elif self.action_btn.text() == "Resume":
+        elif self.action_btn.toolTip() == "Resume":
             manager.resume_download(self.tmdb_id)
 
     def update_progress(self, dl_info):
-        self.progress_bar.setValue(int(dl_info.get("percent", 0)))
+        percent = int(dl_info.get("percent", 0))
+        self.poster_label.setProgress(percent, dl_info.get("status", "Downloading..."))
         
         # Format speed
         speed = dl_info.get("speed", 0)
@@ -171,7 +237,10 @@ class DownloadItemWidget(QFrame):
             eta_str = ""
         
         if speed_str or eta_str:
-            self.meta_label.setText(f"{speed_str}  •  {eta_str}")
+            self.meta_badge.setText(f"{speed_str}  •  {eta_str}")
+            self.meta_badge.show()
+        else:
+            self.meta_badge.hide()
 
     def load_poster(self):
         url = self.movie_data.get("poster_path")
@@ -204,10 +273,12 @@ class DownloadItemWidget(QFrame):
             
     def update_status(self, status):
         self.status_label.setText(status)
+        self.poster_label.setProgress(self.poster_label.progress, status)
+        
         if status == "Completed":
-            self.progress_bar.setValue(100)
-            self.meta_label.setText("")
-            self.action_btn.setText("Open Folder")
+            self.meta_badge.hide()
+            self.action_btn.setIcon(QIcon("assets/icons/folder.svg"))
+            self.action_btn.setToolTip("Open Folder")
             try:
                 self.action_btn.clicked.disconnect()
             except Exception:
@@ -216,40 +287,19 @@ class DownloadItemWidget(QFrame):
             self.action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: transparent;
-                    color: #14B885;
-                    border: 2px solid #14B885;
-                    border-radius: 18px;
-                    font-weight: bold;
+                    border: none;
+                    border-radius: 20px;
                 }
                 QPushButton:hover {
                     background-color: rgba(20, 184, 133, 0.1);
-                    color: #1AE0A1;
-                    border: 2px solid #1AE0A1;
                 }
             """)
         elif status == "Paused":
-            self.action_btn.setText("Resume")
-            self.progress_bar.setStyleSheet("""
-                QProgressBar::chunk {
-                    background-color: #ff9800;
-                    border-radius: 4px;
-                }
-            """)
+            self.action_btn.setIcon(QIcon("assets/icons/play.svg"))
+            self.action_btn.setToolTip("Resume")
         elif status == "Downloading...":
-            self.action_btn.setText("Pause")
-            self.progress_bar.setStyleSheet("""
-                QProgressBar::chunk {
-                    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 #14B885, stop:1 #1AE0A1);
-                    border-radius: 4px;
-                }
-            """)
-        elif status.startswith("Error"):
-            self.progress_bar.setStyleSheet("""
-                QProgressBar::chunk {
-                    background-color: #ff4444;
-                    border-radius: 4px;
-                }
-            """)
+            self.action_btn.setIcon(QIcon("assets/icons/pause.svg"))
+            self.action_btn.setToolTip("Pause")
             
     def open_folder(self):
         import platform

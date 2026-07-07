@@ -14,14 +14,34 @@
 
 ---
 
-A personal movie database application created to keep track of the movies You Wanna see throughout your life.
+The ultimate movie tracker for your never-ending watchlist.
+
+Save movies, discover hidden gems, get personalized recommendations, watch, download, and keep all your future movie obsessions in one place.
+
 
 ---
 
-## Screenshot
+## The Aesthetics 
 
 <div align="center">
-  <img src="docs/Screenshot.png" alt="Application Screenshot" width="90%">
+  <h3>The Discover Page</h3>
+  <p>Immaculate vibes only. Find your next hyperfixation right here. Serving pure algorithmic slay.</p>
+  <img src="docs/Screenshot.png" alt="Discover Page" width="90%">
+  <br><br>
+
+  <h3>Your Cinematic Universe</h3>
+  <p>Main character energy activated. Your entire movie library looking absolutely goated. Fr fr.</p>
+  <img src="docs/Movies.png" alt="Movies Page" width="90%">
+  <br><br>
+
+  <h3>Binge-Watching Era</h3>
+  <p>Living rent-free in your head? Track it here. Time to lock in and touch grass never.</p>
+  <img src="docs/Tv_Series.png" alt="TV Series Page" width="90%">
+  <br><br>
+
+  <h3>The Control Room</h3>
+  <p>Customize your vibe and drop that API key. We love a clean, tailored aesthetic. It’s giving ✨ organized ✨.</p>
+  <img src="docs/Settings.png" alt="Settings Page" width="90%">
 </div>
 
 ---

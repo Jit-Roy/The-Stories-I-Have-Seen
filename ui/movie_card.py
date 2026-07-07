@@ -418,7 +418,10 @@ class SeriesFolderCard(QFrame):
                     loader.signals = self.signals
                     loader.run()
                 else:
-                    self.signals.finished.emit(b"")
+                    try:
+                        self.signals.finished.emit(b"")
+                    except RuntimeError:
+                        pass
 
         QThreadPool.globalInstance().start(FullWorker(self.series_name, self.media_type, self.signals))
 

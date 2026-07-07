@@ -3,6 +3,9 @@ import os
 from PySide6.QtWidgets import QApplication
 from ui.main_window import MainWindow
 import database
+import ctypes
+from PySide6.QtGui import QIcon
+
 
 def main():
     if getattr(sys, 'frozen', False):
@@ -24,6 +27,7 @@ def main():
             
     # Force copy the app icon to AppData so it can be used for the window icon
     try:
+        os.makedirs(os.path.join(app_data_dir, 'assets', 'icons'), exist_ok=True)
         shutil.copy2(os.path.join(base_dir, 'assets', 'icons', 'app_icon.svg'), os.path.join(app_data_dir, 'assets', 'icons', 'app_icon.svg'))
         shutil.copy2(os.path.join(base_dir, 'assets', 'icons', 'app_icon.ico'), os.path.join(app_data_dir, 'assets', 'icons', 'app_icon.ico'))
     except Exception:
@@ -38,24 +42,31 @@ def main():
     import ctypes
     from PySide6.QtGui import QIcon
     
-    # Set AppUserModelID so Windows taskbar correctly groups and uses the custom icon
-    # myappid = 'jitroy.thestoriesihaveseen.app.1.0'
-    # try:
-    #     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-    # except Exception:
-    #     pass
-    app = QApplication(sys.argv)
-    
-    import ctypes
-    myappid = 'JitRoy.TheStoriesIHaveSeen.app.1.0'
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    # ==========================================
+    # OS-SPECIFIC ICON & TASKBAR INITIALIZATION
+    # ==========================================
+    if getattr(sys, 'frozen', False):
+        # 1. COMPILED WINDOWS EXE MODE
+        # No AppUserModelID is set so Windows perfectly inherits the .exe icon at 0ms.
+        app = QApplication(sys.argv)
+        app.setWindowIcon(QIcon("assets/icons/app_icon.ico"))
+    else:
+        # 2. RAW PYTHON SCRIPT MODE
+        # We must override the default python.exe icon using AppUserModelID
+        import ctypes
+        myappid = 'JitRoy.TheStoriesIHaveSeen.app.1.0'
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        except Exception:
+            pass
+            
+        app = QApplication(sys.argv)
+        app.setWindowIcon(QIcon("assets/icons/app_icon.ico"))
+    # ==========================================
     
     # Pre-load themes to ensure SVGs are customized
     from ui.theme_manager import ThemeManager
     ThemeManager.load_theme()
-    
-    # Set the runtime window icon (using .ico ensures it renders correctly in Windows Taskbar)
-    app.setWindowIcon(QIcon("assets/icons/app_icon.ico"))
     
     # Base global styles
     app.setStyleSheet("""
@@ -65,6 +76,14 @@ def main():
             
     window = MainWindow()
     window.show()
+    
+    # In raw Python mode, we use a 0-millisecond timer to apply the icon on the exact first 
+    # cycle of the Qt event loop. This bypasses the Windows HWND creation race condition 
+    # without introducing any visible delay!
+    if not getattr(sys, 'frozen', False):
+        from PySide6.QtCore import QTimer
+        from PySide6.QtGui import QIcon
+        QTimer.singleShot(0, lambda: window.setWindowIcon(QIcon("assets/icons/app_icon.ico")))
     
     sys.exit(app.exec())
 

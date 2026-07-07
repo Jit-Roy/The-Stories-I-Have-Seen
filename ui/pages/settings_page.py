@@ -50,7 +50,7 @@ class SettingsPage(QWidget):
                 color: #0B0D14;
             }
             QPushButton#saveBtn:hover {
-                background-color: #14B884;
+                font-size: 15px;
             }
             QPushButton#editBtn {
                 background-color: rgba(255, 255, 255, 0.05);
@@ -95,7 +95,7 @@ class SettingsPage(QWidget):
         section_title.setStyleSheet("font-size: 18px; font-weight: 600; color: #1AE0A1;")
         card_layout.addWidget(section_title)
 
-        desc = QLabel("Enter your TMDB API Key (v3 auth) below. This is required for fetching movie details, posters, and search results.")
+        desc = QLabel("Enter your TMDB API Key below. This is required for fetching movie details, posters, and search results.")
         desc.setStyleSheet("color: #A0AEC0; font-size: 13px;")
         desc.setWordWrap(True)
         card_layout.addWidget(desc)

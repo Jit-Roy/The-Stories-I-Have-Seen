@@ -482,7 +482,7 @@ async def remove_overlays(page):
         }
     }""")
 
-async def auto_player_loop(page, target_url, duration=20):
+async def auto_player_loop(page, target_url, media_found, duration=20):
     print("[-] Auto-player active...")
     deadline = time.time() + duration
 
@@ -768,7 +768,7 @@ async def probe_all_servers(url, progress_callback=None):
                         
                         await asyncio.sleep(3)
                         
-                        autoplay_task = asyncio.create_task(auto_player_loop(page, embed_url, duration=10))
+                        autoplay_task = asyncio.create_task(auto_player_loop(page, embed_url, media_found, duration=10))
                         
                         try:
                             await asyncio.wait_for(media_found.wait(), timeout=10.0)
@@ -1034,7 +1034,6 @@ async def intercept_media(url, download_path="Downloads", progress_callback=None
                                 'allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation'
                             );
                             document.body.appendChild(iframe);
-                            console.log('[Oracle] Injected iframe:', iframe.src);
                         }}""")
                         
                         # Give the iframe time to load the player
@@ -1045,7 +1044,7 @@ async def intercept_media(url, download_path="Downloads", progress_callback=None
                         
                         # Run auto-player on ALL frames (including the new iframe)
                         autoplay_task = asyncio.create_task(
-                            auto_player_loop(page, embed_url, duration=25)
+                            auto_player_loop(page, embed_url, media_found, duration=25)
                         )
                         
                         log(f"[-] Waiting up to 40s for stream from iframe player...")
@@ -1068,7 +1067,7 @@ async def intercept_media(url, download_path="Downloads", progress_callback=None
                 await clear_gates(page, url)
                 await click_watch_now(page)
                 await remove_overlays(page)
-                autoplay_task = asyncio.create_task(auto_player_loop(page, url, duration=30))
+                autoplay_task = asyncio.create_task(auto_player_loop(page, url, media_found, duration=30))
                 log("[-] Waiting up to 45s for Oracle to intercept the streams...")
                 try:
                     await asyncio.wait_for(media_found.wait(), timeout=45.0)
@@ -1402,13 +1401,6 @@ def download_media(url, page_url=None, cookies=None, headers=None, progress_call
         print(f"\n[!] yt-dlp failed: {e}")
         traceback.print_exc()
         raise e
-    finally:
-        if 'temp_m3u8_file' in locals() and temp_m3u8_file and os.path.exists(temp_m3u8_file):
-            try:
-                os.remove(temp_m3u8_file)
-            except:
-                pass
-
 if __name__ == "__main__":
     test_url = "https://vidsrc.sbs/movie/1339713/"
     asyncio.run(intercept_media(test_url))

@@ -148,12 +148,6 @@ class DownloadWorker(QRunnable):
             )
             self.signals.finished.emit(self.tmdb_id, True, "")
         except Exception as e:
-            import traceback
-            try:
-                with open("download_error.log", "w") as f:
-                    f.write(traceback.format_exc())
-            except:
-                pass
             self.signals.finished.emit(self.tmdb_id, False, str(e))
 
 class DownloadManager(QObject):

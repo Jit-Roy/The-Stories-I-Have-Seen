@@ -1,9 +1,13 @@
 import sqlite3
 import os
-import json
 import sys
+import json
 
-DB_NAME = "movies.db"
+# Use global cache directory for all app data
+application_path = os.path.join(os.path.expanduser("~"), ".cache", "tsic")
+os.makedirs(application_path, exist_ok=True)
+
+DB_NAME = os.path.join(application_path, "movies.db")
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)

@@ -3,7 +3,14 @@ import time
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+import sys
+
+# Use global cache directory for all app data
+application_path = os.path.join(os.path.expanduser("~"), ".cache", "tsic")
+os.makedirs(application_path, exist_ok=True)
+
+ENV_PATH = os.path.join(application_path, ".env")
+load_dotenv(ENV_PATH)
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 BASE_URL = "https://api.tmdb.org/3"
 IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
@@ -15,7 +22,7 @@ def get_api_key():
 def set_api_key(new_key):
     global TMDB_API_KEY
     import dotenv
-    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    env_path = ENV_PATH
     if not os.path.exists(env_path):
         open(env_path, 'w').close()
     dotenv.set_key(env_path, "TMDB_API_KEY", new_key)

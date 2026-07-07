@@ -408,6 +408,7 @@ class DownloadManager(QObject):
             dl_info["percent"] = data.get("percent") or dl_info.get("percent", 0.0)
             dl_info["speed"] = data.get("speed") or dl_info.get("speed", 0)
             dl_info["eta"] = data.get("eta") or dl_info.get("eta", 0)
+            dl_info["total_bytes"] = data.get("total_bytes") or dl_info.get("total_bytes", 0)
             self.progress_updated.emit(tmdb_id, dl_info)
 
     def _on_worker_finished(self, tmdb_id, success, error_msg):

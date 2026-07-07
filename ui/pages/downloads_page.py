@@ -237,8 +237,29 @@ class DownloadItemWidget(QFrame):
         else:
             eta_str = ""
         
-        if speed_str or eta_str:
-            self.meta_badge.setText(f"{speed_str}  •  {eta_str}")
+        total_bytes = dl_info.get("total_bytes", 0)
+        if isinstance(total_bytes, str):
+            try:
+                total_bytes = float(total_bytes)
+            except:
+                total_bytes = 0
+                
+        size_str = ""
+        if total_bytes and total_bytes > 1024 * 1024 * 1024:
+            size_str = f"{total_bytes / (1024 * 1024 * 1024):.1f} GB"
+        elif total_bytes and total_bytes > 1024 * 1024:
+            size_str = f"{total_bytes / (1024 * 1024):.1f} MB"
+
+        meta_parts = []
+        if size_str:
+            meta_parts.append(size_str)
+        if speed_str:
+            meta_parts.append(speed_str)
+        if eta_str:
+            meta_parts.append(eta_str)
+        
+        if meta_parts:
+            self.meta_badge.setText("  •  ".join(meta_parts))
             self.meta_badge.show()
         else:
             self.meta_badge.hide()

@@ -1342,7 +1342,8 @@ def download_media(url, page_url=None, cookies=None, headers=None, progress_call
                                 "type": "progress", 
                                 "percent": percent,
                                 "speed": speed,
-                                "eta": eta
+                                "eta": eta,
+                                "total_bytes": total
                             })
                         elif d.get('fragment_count') and d.get('fragment_index'):
                             percent = (d['fragment_index'] / d['fragment_count']) * 100
@@ -1352,7 +1353,8 @@ def download_media(url, page_url=None, cookies=None, headers=None, progress_call
                                 "type": "progress", 
                                 "percent": percent,
                                 "speed": speed,
-                                "eta": eta
+                                "eta": eta,
+                                "total_bytes": d.get('total_bytes') or d.get('total_bytes_estimate')
                             })
 
                     if pbar is None:

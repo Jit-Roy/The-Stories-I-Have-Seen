@@ -4,6 +4,7 @@ from PySide6.QtCore import QObject, Signal, QRunnable, QThreadPool
 import threading
 import yt_dlp
 import database
+import downloader
 
 class WorkerSignals(QObject):
     progress = Signal(int, dict)
@@ -147,6 +148,12 @@ class DownloadWorker(QRunnable):
             )
             self.signals.finished.emit(self.tmdb_id, True, "")
         except Exception as e:
+            import traceback
+            try:
+                with open("download_error.log", "w") as f:
+                    f.write(traceback.format_exc())
+            except:
+                pass
             self.signals.finished.emit(self.tmdb_id, False, str(e))
 
 class DownloadManager(QObject):
@@ -415,7 +422,7 @@ class DownloadManager(QObject):
                 elif "403" in str(error_msg) or "Forbidden" in str(error_msg):
                     dl_info["status"] = "Error: Stream expired, please restart"
                 else:
-                    dl_info["status"] = f"Download Failed"
+                    dl_info["status"] = f"Failed: {error_msg}"
 
 
             if success:

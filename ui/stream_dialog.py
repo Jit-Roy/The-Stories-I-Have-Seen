@@ -9,7 +9,7 @@ class StreamSelectionDialog(QDialog):
         super().__init__(parent)
         self.results = results
         self.setWindowTitle("Select Stream Options")
-        self.setFixedSize(400, 300)
+        self.setFixedSize(400, 340)
         
         from ui.theme_manager import ThemeManager
         primary = ThemeManager.get_color("primary")

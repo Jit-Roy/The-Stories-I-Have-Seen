@@ -29,6 +29,18 @@ class ProfileCard(QWidget):
         self.img_label.setFixedSize(120, 180)
         self.img_label.setStyleSheet("background-color: #1A1C23; border-radius: 8px;")
         layout.addWidget(self.img_label)
+
+        # Hover gradient overlay — same as MovieCard (hidden by default)
+        self.hover_overlay = QWidget(self.img_label)
+        self.hover_overlay.setFixedSize(120, 180)
+        self.hover_overlay.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0,0,0,0.6), stop:0.25 rgba(0,0,0,0), stop:0.75 rgba(0,0,0,0), stop:1 rgba(0,0,0,0.6));
+                border-radius: 8px;
+            }
+        """)
+        self.hover_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.hover_overlay.hide()
         
         name = QLabel(cast_data.get("name", ""))
         name.setStyleSheet("color: white; font-weight: bold; font-size: 12px;")
@@ -38,6 +50,14 @@ class ProfileCard(QWidget):
         layout.addStretch()
         
         self.load_image()
+
+    def enterEvent(self, event):
+        self.hover_overlay.show()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.hover_overlay.hide()
+        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if self.on_click:
@@ -695,6 +715,7 @@ class MovieDetailPage(QWidget):
 
         similar = details.get("similar", [])
         if similar:
+            tmdb_api.inject_db_status(similar)
             def handle_view_all():
                 if self.show_grid_view and self.movie_data:
                     title = f"Similar to: {self.movie_data.get('title', self.movie_data.get('name', 'Unknown'))}"
@@ -715,6 +736,7 @@ class MovieDetailPage(QWidget):
         # --- Recommendations ---
         recommendations = details.get("recommendations", [])
         if recommendations:
+            tmdb_api.inject_db_status(recommendations)
             def handle_view_all_rec():
                 if self.show_grid_view and self.movie_data:
                     title = f"Recommendations for: {self.movie_data.get('title', self.movie_data.get('name', 'Unknown'))}"

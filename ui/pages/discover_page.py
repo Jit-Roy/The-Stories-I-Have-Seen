@@ -103,7 +103,20 @@ class CategoryCard(QWidget):
         lbl.setAlignment(Qt.AlignBottom | Qt.AlignCenter)
         lbl.setWordWrap(True)
         lbl.setGeometry(10, 10, 140, 210) # X, Y, Width, Height
-            
+
+        # Hover highlight overlay (hidden by default)
+        self.hover_overlay = QWidget(self.img)
+        self.hover_overlay.setFixedSize(160, 240)
+        self.hover_overlay.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0,0,0,0.6), stop:0.25 rgba(0,0,0,0), stop:0.75 rgba(0,0,0,0), stop:1 rgba(0,0,0,0.6));
+                border-radius: 12px;
+            }
+        """)
+        self.hover_overlay.hide()
+        self.hover_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.hover_overlay.raise_()
+
         layout.addWidget(self.img)
 
     def _apply_image(self, image_data):
@@ -143,6 +156,14 @@ class CategoryCard(QWidget):
             
             self.img.setPixmap(QPixmap(final_img))
 
+    def enterEvent(self, event):
+        self.hover_overlay.show()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.hover_overlay.hide()
+        super().leaveEvent(event)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.on_click(self.data)
@@ -175,6 +196,18 @@ class PersonCard(QWidget):
                 loader = ImageLoader(url)
                 loader.signals.finished.connect(self._apply_image)
                 QThreadPool.globalInstance().start(loader)
+
+        # Hover highlight overlay on the photo (hidden by default)
+        self.hover_overlay = QWidget(self.img)
+        self.hover_overlay.setFixedSize(img_width, img_height)
+        self.hover_overlay.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0,0,0,0.6), stop:0.25 rgba(0,0,0,0), stop:0.75 rgba(0,0,0,0), stop:1 rgba(0,0,0,0.6));
+                border-radius: 8px;
+            }
+        """)
+        self.hover_overlay.hide()
+        self.hover_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
             
         name = QLabel(data["name"])
         name.setStyleSheet("color: white; font-weight: bold; font-size: 12px;")
@@ -194,6 +227,14 @@ class PersonCard(QWidget):
             pixmap = QPixmap(img).scaled(int(self.img_width * dpr), int(self.img_height * dpr), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
             pixmap.setDevicePixelRatio(dpr)
             self.img.setPixmap(pixmap)
+
+    def enterEvent(self, event):
+        self.hover_overlay.show()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.hover_overlay.hide()
+        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

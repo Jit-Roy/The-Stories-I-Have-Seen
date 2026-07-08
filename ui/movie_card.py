@@ -391,10 +391,31 @@ class SeriesFolderCard(QFrame):
         overlay_layout.addWidget(open_btn)
         overlay_layout.addStretch()
 
+        # Hover highlight overlay (hidden by default)
+        self.hover_overlay = QWidget(self.poster_container)
+        self.hover_overlay.setFixedSize(160, 240)
+        self.hover_overlay.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0,0,0,0.6), stop:0.25 rgba(0,0,0,0), stop:0.75 rgba(0,0,0,0), stop:1 rgba(0,0,0,0.6));
+                border-radius: 12px;
+            }
+        """)
+        self.hover_overlay.hide()
+        self.hover_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.hover_overlay.raise_()
+
         layout.addWidget(self.poster_container)
         self.setLayout(layout)
 
         self.load_poster()
+
+    def enterEvent(self, event):
+        self.hover_overlay.show()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.hover_overlay.hide()
+        super().leaveEvent(event)
 
     def load_poster(self):
         class Signals(QObject):

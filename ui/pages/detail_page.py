@@ -12,6 +12,7 @@ from ui.chrome_sniffer import ChromeSnifferDialog
 import tmdb_api
 from download_manager import DownloadManager
 from PySide6.QtWidgets import QDialog, QWidget
+DETAILS_CACHE = {}
 
 class ProfileCard(QWidget):
     def __init__(self, cast_data, on_click_callback):
@@ -277,7 +278,12 @@ class MovieDetailPage(QWidget):
         header_layout.setContentsMargins(10, 10, 10, 10)
         back_btn = QPushButton("←")
         back_btn.setFixedSize(40, 40)
-        back_btn.setStyleSheet("background-color: transparent; color: white; font-weight: bold; font-size: 28px; border: none;")
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        back_btn.setStyleSheet(f"""
+            QPushButton {{ background-color: transparent; color: white; font-weight: bold; font-size: 28px; border: none; }}
+            QPushButton:hover {{ color: {primary}; }}
+        """)
         back_btn.setCursor(Qt.PointingHandCursor)
         back_btn.clicked.connect(self.go_back)
         header_layout.addWidget(back_btn)
@@ -588,8 +594,14 @@ class MovieDetailPage(QWidget):
             if cached:
                 self.on_poster_loaded(cached)
 
-        # ── Kick off the details worker (non-blocking) ────────────────
+        # ── Smart Cache Check ─────────────────────────────────────────
         media_type = movie_data.get("media_type", "movie")
+        cache_key = (movie_id, media_type)
+        if cache_key in DETAILS_CACHE:
+            self._on_details_loaded(DETAILS_CACHE[cache_key])
+            return
+
+        # ── Kick off the details worker (non-blocking) ────────────────
         worker = _DetailWorker(movie_id, media_type)
         worker.signals.finished.connect(self._on_details_loaded)
         QThreadPool.globalInstance().start(worker)
@@ -616,6 +628,11 @@ class MovieDetailPage(QWidget):
             return
 
         self._last_details = details
+        
+        # ── Smart Cache Store ─────────────────────────────────────────
+        media_type = details.get("media_type", self.movie_data.get("media_type", "movie"))
+        cache_key = (details.get("id"), media_type)
+        DETAILS_CACHE[cache_key] = details
 
         # Re-inject fresh DB status (details cache may have been stale)
         import tmdb_api
@@ -795,24 +812,29 @@ class MovieDetailPage(QWidget):
     def update_buttons(self):
         status = self.movie_data.get("status") if self.movie_data else None
 
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        secondary = ThemeManager.THEMES[ThemeManager.get_current_theme_name()].get("secondary", primary)
+        rgba_base = ThemeManager.THEMES[ThemeManager.get_current_theme_name()]["rgba_base"]
+
         if status == "watched":
             self.btn_watched.setText("✓ Watched")
-            self.btn_watched.setStyleSheet("""
-                QPushButton { background-color: #14B885; color: #0F172A; border-radius: 6px; padding: 10px 24px; font-weight: bold; font-size: 14px; border: none; }
-                QPushButton:hover { background-color: #1AE0A1; }
+            self.btn_watched.setStyleSheet(f"""
+                QPushButton {{ background-color: {secondary}; color: #0F172A; border-radius: 6px; padding: 10px 24px; font-weight: bold; font-size: 14px; border: none; }}
+                QPushButton:hover {{ background-color: {ThemeManager.lighten_hex(secondary, 0.2)}; }}
             """)
         else:
             self.btn_watched.setText("Mark Watched")
-            self.btn_watched.setStyleSheet("""
-                QPushButton { background-color: #1AE0A1; color: #0F172A; border-radius: 6px; padding: 10px 24px; font-weight: bold; font-size: 14px; border: none; }
-                QPushButton:hover { background-color: #1AE0A1; }
+            self.btn_watched.setStyleSheet(f"""
+                QPushButton {{ background-color: {primary}; color: #0F172A; border-radius: 6px; padding: 10px 24px; font-weight: bold; font-size: 14px; border: none; }}
+                QPushButton:hover {{ background-color: {ThemeManager.lighten_hex(primary, 0.2)}; }}
             """)
 
         if status == "watch_later":
             self.btn_later.setText("✓ Watch Later")
-            self.btn_later.setStyleSheet("""
-                QPushButton { background-color: transparent; color: #1AE0A1; border: 1.5px solid #1AE0A1; border-radius: 6px; padding: 10px 24px; font-weight: bold; font-size: 14px; }
-                QPushButton:hover { background-color: rgba(26, 224, 161, 0.1); }
+            self.btn_later.setStyleSheet(f"""
+                QPushButton {{ background-color: transparent; color: {primary}; border: 1.5px solid {primary}; border-radius: 6px; padding: 10px 24px; font-weight: bold; font-size: 14px; }}
+                QPushButton:hover {{ background-color: rgba({rgba_base}, 0.1); }}
             """)
         else:
             self.btn_later.setText("Watch Later")
@@ -822,13 +844,14 @@ class MovieDetailPage(QWidget):
             """)
         from ui.theme_manager import ThemeManager
         play_color = ThemeManager.get_color("complementary")
+        play_hover = ThemeManager.lighten_hex(play_color, 0.2)
         self.btn_play.setStyleSheet(f"""
             /* COMPLEMENTARY */
             QPushButton {{
                 background-color: {play_color}; color: #0F172A; border-radius: 6px;
                 padding: 10px 24px; font-weight: bold; font-size: 14px; border: none;
             }}
-            QPushButton:hover {{ background-color: {play_color}; opacity: 0.9; }}
+            QPushButton:hover {{ background-color: {play_hover}; }}
         """)
         
         ThemeManager.apply_theme_to_widget(self)

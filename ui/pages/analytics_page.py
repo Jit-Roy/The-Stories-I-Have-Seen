@@ -203,10 +203,14 @@ class AnalyticsPage(QWidget):
         wishlist_movies_count = sum(1 for m in movies if m.get("status") == "watch_later" and m.get("media_type", "movie") == "movie")
         wishlist_tv_count = sum(1 for m in movies if m.get("status") == "watch_later" and m.get("media_type") == "tv")
         
-        if not watched and wishlist_movies_count == 0 and wishlist_tv_count == 0:
+        if not movies:
             self._render_empty_state()
             return
-            
+        
+        if not watched:
+            self._render_empty_state("No watched movies yet.\nMark some movies as watched to generate beautiful analytics!")
+            return
+
         # 1. Main Stats "Hero" Card
         total_mins = sum((m.get("runtime") or 0) for m in watched)
         hours = total_mins // 60
@@ -454,12 +458,15 @@ class AnalyticsPage(QWidget):
         
         return card, layout
 
-    def _render_empty_state(self):
-        empty = QLabel("Your collection is empty.\nWatch some movies to generate beautiful analytics!")
+    def _render_empty_state(self, message=None):
+        if message is None:
+            message = "Your collection is empty.\nWatch some movies to generate beautiful analytics!"
+        empty = QLabel(message)
         empty.setAlignment(Qt.AlignCenter)
         empty.setStyleSheet("color: #4A5070; font-size: 18px; font-weight: 500;")
         self.content_layout.addWidget(empty)
         self.content_layout.addStretch()
+
 
     def on_chart_clicked(self, category, value):
         from ui.main_window import MainWindow

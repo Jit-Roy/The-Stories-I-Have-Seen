@@ -132,3 +132,15 @@ class ThemeManager:
     @classmethod
     def get_color(cls, key="primary"):
         return cls.THEMES.get(cls._current_theme_name, cls.THEMES[cls.DEFAULT_THEME])[key]
+
+    @classmethod
+    def lighten_hex(cls, hex_color, factor=0.2):
+        """Lightens a hex color (e.g. '#FF0000') by the given factor (0.0 to 1.0)."""
+        if not hex_color.startswith('#'):
+            return hex_color
+        hex_color = hex_color.lstrip('#')
+        r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        r = min(255, int(r + (255 - r) * factor))
+        g = min(255, int(g + (255 - g) * factor))
+        b = min(255, int(b + (255 - b) * factor))
+        return f"#{r:02X}{g:02X}{b:02X}"

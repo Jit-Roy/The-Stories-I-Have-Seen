@@ -113,7 +113,7 @@ class MainWindow(QMainWindow):
         self.main_stack = QStackedWidget()
         self._current_main_index = 0
         self.main_stack.currentChanged.connect(self._on_tab_changed)
-        self.tab_search_texts = {}
+        self.tab_search_texts = {} 
 
         self.discover_page = DiscoverPage(self.change_status, self.show_movie_detail, self.show_person_detail, self.show_grid_view)
         self.movies_page = MoviesPage(self.change_status, self.show_movie_detail, self.show_grid_view)
@@ -315,8 +315,6 @@ class MainWindow(QMainWindow):
     def switch_page(self, index, active_btn):
         old_index = self.main_stack.currentIndex()
         if hasattr(self, "search_bar"):
-            if not hasattr(self, "tab_search_texts"):
-                self.tab_search_texts = {}
             self.tab_search_texts[old_index] = self.search_bar.text()
 
         self.main_stack.setCurrentIndex(index)
@@ -329,7 +327,7 @@ class MainWindow(QMainWindow):
         self.downloads_btn.setChecked(False)
         self.settings_btn.setChecked(False)
         active_btn.setChecked(True)
-        
+
         if hasattr(self, "search_bar"):
             if index == 0:
                 self.search_bar.setPlaceholderText("Search for a movie, TV show, or actor...")
@@ -337,11 +335,7 @@ class MainWindow(QMainWindow):
                 self.search_bar.setPlaceholderText("Search for a movie title...")
             elif index == 2:
                 self.search_bar.setPlaceholderText("Search for a TV series title...")
-            
-            if hasattr(self, "tab_search_texts"):
-                self.search_bar.setText(self.tab_search_texts.get(index, ""))
-        
-        # If we switch to a tab and it happens to be at its root page (0), we can refresh lists
+
         t_stack = self.tab_stacks.get(index)
         if t_stack and t_stack.currentIndex() == 0:
             if index == 3:
@@ -356,6 +350,12 @@ class MainWindow(QMainWindow):
             elif index == 2:
                 import ui.components as components
                 self.tv_page.filter_bar.set_params(components.GLOBAL_FILTER_STATE)
+
+        # Restore this tab's own saved search text LAST so nothing can overwrite it
+        if hasattr(self, "search_bar"):
+            self.search_bar.blockSignals(True)
+            self.search_bar.setText(self.tab_search_texts.get(index, ""))
+            self.search_bar.blockSignals(False)
 
     def _on_api_key_changed(self):
         """Called when the user saves a new TMDB API Key from the settings page."""
@@ -448,7 +448,19 @@ class MainWindow(QMainWindow):
             t_stack = self.tab_stacks[0]
             
         current_index = t_stack.currentIndex()
-        state = t_stack.detail_page.movie_data if current_index == 1 else None
+        
+        state = None
+        if current_index == 1:
+            state = t_stack.detail_page.movie_data
+        elif current_index == 2:
+            state = {
+                "title": getattr(t_stack.grid_page, "current_title", title),
+                "fetch_func": getattr(t_stack.grid_page, "fetch_func", fetch_func),
+                "initial_params": getattr(t_stack.grid_page, "initial_params", initial_params),
+                "card_renderer": getattr(t_stack.grid_page, "card_renderer", card_renderer),
+                "show_filter_bar": getattr(t_stack.grid_page, "show_filter_bar", show_filter_bar)
+            }
+            
         t_stack.page_history.append((current_index, state))
         
         t_stack.is_text_search = initial_params is not None and "query" in initial_params
@@ -538,7 +550,9 @@ class MainWindow(QMainWindow):
         self.center_layout.addSpacing(5)
 
     def _set_search_style(self, focused: bool):
-        border = "#1AE0A1" if focused else "#1E2030"
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        border = primary if focused else "#1E2030"
         bg     = "#0B0D16" if focused else "#0D0F18"
         self.search_wrapper.setStyleSheet(f"""
             QFrame#search_wrapper {{
@@ -579,7 +593,7 @@ class MainWindow(QMainWindow):
                         return PersonCard(item, lambda p: self.show_person_detail(p["id"]), card_width=160, card_height=280, img_width=160, img_height=240)
                     return MovieCard(item, self.change_status, self.show_movie_detail)
                     
-                self.show_grid_view(f"Search Results for '{query}'", lambda page: tmdb_api.search_multi(query, page), {"query": query}, renderer, show_filter_bar=False)
+                self.show_grid_view(f"Search Results for '{query}'", lambda page: tmdb_api.search_multi(query, page), {"query": query}, renderer)
 
         # Hitting Enter in the search bar acts exactly like clicking "Discover"
         if t_stack.currentIndex() == 2 and getattr(t_stack, "is_text_search", False):
@@ -623,6 +637,14 @@ class MainWindow(QMainWindow):
                 self.tv_page.filter_bar.set_params(components.GLOBAL_FILTER_STATE)
         elif prev_index == 1 and state and t_stack.detail_page:
             t_stack.detail_page.load_movie(state)
+        elif prev_index == 2 and isinstance(state, dict):
+            t_stack.grid_page.load_grid(
+                state.get("title", ""),
+                state.get("fetch_func"),
+                state.get("initial_params"),
+                state.get("card_renderer"),
+                state.get("show_filter_bar", True)
+            )
         elif prev_index == 3 and state and t_stack.person_page:
             t_stack.person_page.person_id = state
             t_stack.person_page.load_person(state)
@@ -630,22 +652,10 @@ class MainWindow(QMainWindow):
         t_stack.setCurrentIndex(prev_index)
 
     def _on_tab_changed(self, index):
-        # Save search text for the previous tab
-        if hasattr(self, "_current_main_index"):
-            prev_stack = self.main_stack.widget(self._current_main_index)
-            if isinstance(prev_stack, TabStack) and hasattr(self, "search_bar"):
-                prev_stack.saved_search_text = self.search_bar.text()
-                
         self._current_main_index = index
         
         t_stack = self.main_stack.widget(index)
         if isinstance(t_stack, TabStack):
-            # Restore search text for the new tab
-            if hasattr(self, "search_bar"):
-                self.search_bar.blockSignals(True)
-                self.search_bar.setText(getattr(t_stack, "saved_search_text", ""))
-                self.search_bar.blockSignals(False)
-                
             self._update_search_visibility(t_stack)
                 
             if t_stack.currentIndex() == 0:

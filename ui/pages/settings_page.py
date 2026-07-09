@@ -51,6 +51,7 @@ class SettingsPage(QWidget):
             }
             QPushButton#saveBtn:hover {
                 font-size: 15px;
+                background-color: #14B885;
             }
             QPushButton#editBtn {
                 background-color: rgba(255, 255, 255, 0.05);

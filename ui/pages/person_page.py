@@ -4,8 +4,10 @@ from PySide6.QtCore import Qt, QRunnable, QThreadPool, Signal, QObject
 from PySide6.QtGui import QPixmap, QIcon
 import requests
 import tmdb_api
-from ui.movie_card import MovieCard
+from ui.movie_card import RoundedImage, ImageLoader, MovieCard
 from ui.components import HorizontalCarousel
+
+PERSON_CACHE = {}
 
 class _PersonWorkerSignals(QObject):
     finished = Signal(dict)
@@ -45,7 +47,12 @@ class PersonPage(QWidget):
         self.back_btn = QPushButton("←")
         self.back_btn.setFixedSize(40, 40)
         self.back_btn.setCursor(Qt.PointingHandCursor)
-        self.back_btn.setStyleSheet("background-color: transparent; color: white; font-weight: bold; font-size: 28px; border: none;")
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        self.back_btn.setStyleSheet(f"""
+            QPushButton {{ background-color: transparent; color: white; font-weight: bold; font-size: 28px; border: none; }}
+            QPushButton:hover {{ color: {primary}; }}
+        """)
         self.back_btn.clicked.connect(self.go_back_callback)
         h_layout.addWidget(self.back_btn)
         h_layout.addStretch()
@@ -92,6 +99,11 @@ class PersonPage(QWidget):
         # Scroll to top
         self.scroll.verticalScrollBar().setValue(0)
 
+        # ── Smart Cache Check ─────────────────────────────────────────
+        if person_id in PERSON_CACHE:
+            self._on_person_loaded(PERSON_CACHE[person_id])
+            return
+
         worker = _PersonWorker(person_id)
         worker.signals.finished.connect(self._on_person_loaded)
         QThreadPool.globalInstance().start(worker)
@@ -102,6 +114,9 @@ class PersonPage(QWidget):
             self.loading_label.setText("Failed to load person details.")
             self.loading_label.show()
             return
+
+        # ── Smart Cache Store ─────────────────────────────────────────
+        PERSON_CACHE[data["id"]] = data
 
         self.profile_container = QWidget()
         p_layout = QHBoxLayout(self.profile_container)
@@ -175,7 +190,8 @@ class PersonPage(QWidget):
                 if self.show_grid:
                     self.show_grid(
                         f"Filmography: {data.get('name', 'Unknown')}", 
-                        lambda page=1: tmdb_api.get_person_full_credits(data.get("id"), page=page)
+                        lambda page=1: tmdb_api.get_person_full_credits(data.get("id"), page=page),
+                        {"with_cast": str(data.get("id")), "sort_by": "popularity.desc"}
                     )
 
             self.carousel = HorizontalCarousel(

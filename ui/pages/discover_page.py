@@ -317,7 +317,7 @@ class DiscoverPage(QWidget):
             title,
             data[:10],
             renderer,
-            lambda: self.on_view_all(title, fetch_all, None, renderer)
+            lambda: self.on_view_all(title, fetch_all, None, renderer, False)
         )
         return car
 
@@ -356,7 +356,7 @@ class DiscoverPage(QWidget):
             "Trending People",
             data[:10],
             renderer,
-            lambda: self.on_view_all("Trending People", tmdb_api.get_trending_people, None, renderer)
+            lambda: self.on_view_all("Trending People", tmdb_api.get_trending_people, None, renderer, False)
         )
             
         idx = self.content_layout.indexOf(self.people_placeholder)

@@ -11,6 +11,8 @@ from ui.movie_card import RoundedImage, ImageLoader
 from ui.chrome_sniffer import ChromeSnifferDialog
 from download_manager import DownloadManager
 
+SEASON_CACHE = {}
+
 class _SeasonWorkerSignals(QObject):
     finished = Signal(dict)
 
@@ -226,9 +228,12 @@ class EpisodeCard(QFrame):
             if stop2 > 1.0:
                 stop2 = 1.0
                 
+            from ui.theme_manager import ThemeManager
+            rgba_base = ThemeManager.THEMES[ThemeManager.get_current_theme_name()]["rgba_base"]
+            
             self.btn_download.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 rgba(20, 184, 133, 0.4), stop:{percent} rgba(20, 184, 133, 0.4), stop:{stop2} rgba(255, 255, 255, 0.1), stop:1 rgba(255, 255, 255, 0.1));
+                    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 rgba({rgba_base}, 0.4), stop:{percent} rgba({rgba_base}, 0.4), stop:{stop2} rgba(255, 255, 255, 0.1), stop:1 rgba(255, 255, 255, 0.1));
                     border: 1px solid rgba(255, 255, 255, 0.5);
                     color: white;
                     padding: 10px 20px;
@@ -237,7 +242,7 @@ class EpisodeCard(QFrame):
                     font-size: 14px;
                 }}
                 QPushButton:hover {{
-                    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 rgba(20, 184, 133, 0.5), stop:{percent} rgba(20, 184, 133, 0.5), stop:{stop2} rgba(255, 255, 255, 0.2), stop:1 rgba(255, 255, 255, 0.2));
+                    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 rgba({rgba_base}, 0.5), stop:{percent} rgba({rgba_base}, 0.5), stop:{stop2} rgba(255, 255, 255, 0.2), stop:1 rgba(255, 255, 255, 0.2));
                 }}
             """)
 
@@ -301,8 +306,14 @@ class SeasonPage(QWidget):
         
         # Header
         header_layout = QHBoxLayout()
-        self.btn_back = QPushButton("← Back")
-        self.btn_back.setStyleSheet("color: #1AE0A1; background: transparent; font-size: 16px; font-weight: bold; border: none;")
+        self.btn_back = QPushButton("←")
+        self.btn_back.setFixedSize(40, 40)
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        self.btn_back.setStyleSheet(f"""
+            QPushButton {{ background-color: transparent; color: white; font-size: 28px; font-weight: bold; border: none; }}
+            QPushButton:hover {{ color: {primary}; }}
+        """)
         self.btn_back.setCursor(QCursor(Qt.PointingHandCursor))
         self.btn_back.clicked.connect(self.go_back_callback)
         header_layout.addWidget(self.btn_back)
@@ -343,6 +354,12 @@ class SeasonPage(QWidget):
             if item.widget():
                 item.widget().deleteLater()
                 
+        # ── Smart Cache Check ─────────────────────────────────────────
+        cache_key = (tv_id, season_number)
+        if cache_key in SEASON_CACHE:
+            self._on_season_loaded(SEASON_CACHE[cache_key], tv_id, season_number)
+            return
+
         lbl = QLabel("Loading episodes...")
         lbl.setStyleSheet("color: #A0AEC0;")
         self.episodes_layout.addWidget(lbl)
@@ -356,6 +373,10 @@ class SeasonPage(QWidget):
             item = self.episodes_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+                
+        # ── Smart Cache Store ─────────────────────────────────────────
+        cache_key = (tv_id, season_number)
+        SEASON_CACHE[cache_key] = data
 
         episodes = data.get("episodes", [])
         if not episodes:

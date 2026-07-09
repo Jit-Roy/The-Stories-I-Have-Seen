@@ -17,8 +17,14 @@ class WishlistPage(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(10, 10, 10, 10)
         
-        self.back_btn = QPushButton("← Back")
-        self.back_btn.setStyleSheet("background-color: transparent; color: white; font-weight: bold; font-size: 16px; border: none;")
+        self.back_btn = QPushButton("←")
+        self.back_btn.setFixedSize(40, 40)
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        self.back_btn.setStyleSheet(f"""
+            QPushButton {{ background-color: transparent; color: white; font-weight: bold; font-size: 28px; border: none; }}
+            QPushButton:hover {{ color: {primary}; }}
+        """)
         self.back_btn.setCursor(Qt.PointingHandCursor)
         self.back_btn.clicked.connect(lambda: self.set_series_view(None))
         self.back_btn.hide()

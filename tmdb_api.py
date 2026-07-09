@@ -63,6 +63,13 @@ def _make_request(endpoint, params=None, retries=3):
         return {}
     if params is None:
         params = {}
+        
+    cache_key = (endpoint, frozenset((k, v) for k, v in params.items() if k != "api_key"))
+    if cache_key in _search_cache:
+        timestamp, data = _search_cache[cache_key]
+        if time.time() - timestamp < 300:  # 5 minutes cache
+            return data
+
     params["api_key"] = TMDB_API_KEY
     headers = {
         "User-Agent": "WorldsIveWatched/1.0",
@@ -74,7 +81,9 @@ def _make_request(endpoint, params=None, retries=3):
                 f"{BASE_URL}{endpoint}", params=params, headers=headers, timeout=10
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            _search_cache[cache_key] = (time.time(), data)
+            return data
         except requests.exceptions.ConnectionError:
             print(f"Connection error on {endpoint}, retrying ({attempt+1}/{retries})...")
             time.sleep(0.5)

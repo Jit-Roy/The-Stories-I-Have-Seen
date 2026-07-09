@@ -18,8 +18,13 @@ class GridPage(QWidget):
         header_layout.setContentsMargins(10, 10, 10, 10)
         back_btn = QPushButton("←")
         back_btn.setFixedSize(40, 40)
-        back_btn.setStyleSheet("background-color: transparent; color: white; font-weight: bold; font-size: 28px; border: none;")
         back_btn.setCursor(Qt.PointingHandCursor)
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        back_btn.setStyleSheet(f"""
+            QPushButton {{ background-color: transparent; color: white; font-weight: bold; font-size: 28px; border: none; }}
+            QPushButton:hover {{ color: {primary}; }}
+        """)
         back_btn.clicked.connect(self.go_back)
         header_layout.addWidget(back_btn)
         
@@ -45,7 +50,13 @@ class GridPage(QWidget):
         self.content_layout.addWidget(self.flow_container)
         
         self.load_more_btn = QPushButton("Load More")
-        self.load_more_btn.setStyleSheet("background-color: #1AE0A1; color: #0F172A; padding: 10px 30px; border-radius: 15px; font-weight: bold; font-size: 16px; margin: 20px 0px;")
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        primary_light = ThemeManager.lighten_hex(primary, 0.2)
+        self.load_more_btn.setStyleSheet(f"""
+            QPushButton {{ background-color: {primary}; color: #0F172A; padding: 10px 30px; border-radius: 15px; font-weight: bold; font-size: 16px; margin: 20px 0px; }}
+            QPushButton:hover {{ background-color: {primary_light}; }}
+        """)
         self.load_more_btn.setCursor(Qt.PointingHandCursor)
         self.load_more_btn.clicked.connect(self.load_next_page)
         self.load_more_btn.hide()
@@ -66,6 +77,9 @@ class GridPage(QWidget):
         self.flow_layout.clear()
                 
     def load_grid(self, title, fetch_func, initial_params=None, card_renderer=None, show_filter_bar=True):
+        self.current_title = title
+        self.initial_params = initial_params
+        self.show_filter_bar = show_filter_bar
         self.title_label.setText(title)
         self.clear_grid()
         self.current_page = 1
@@ -73,12 +87,12 @@ class GridPage(QWidget):
         self.card_renderer = card_renderer
         self.load_more_btn.show()
         
-        if initial_params is not None and show_filter_bar:
+        if show_filter_bar:
             import tmdb_api
             self.filter_bar.populate_genres(tmdb_api.get_genres())
             self.filter_bar.populate_languages(tmdb_api.get_languages())
             self.filter_bar.populate_countries(tmdb_api.get_countries())
-            self.filter_bar.set_params(initial_params)
+            self.filter_bar.set_params(initial_params if initial_params else {})
             self.filter_bar.show()
         else:
             self.filter_bar.hide()

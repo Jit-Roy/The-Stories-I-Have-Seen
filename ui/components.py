@@ -179,12 +179,14 @@ class HeroBanner(QWidget):
         
         btn_layout = QHBoxLayout()
         explore_btn = QPushButton("▶ Explore Now")
-        explore_btn.setStyleSheet("""
-            QPushButton { background-color: #1AE0A1; color: #0F172A; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; }
-            QPushButton:hover { background-color: #14B885; }
-        """)
         from ui.theme_manager import ThemeManager
-        explore_btn.setStyleSheet(ThemeManager.format_style(explore_btn.styleSheet()))
+        primary = ThemeManager.get_color("primary")
+        secondary = ThemeManager.THEMES[ThemeManager.get_current_theme_name()].get("secondary", primary)
+        
+        explore_btn.setStyleSheet(f"""
+            QPushButton {{ background-color: {primary}; color: #0F172A; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; }}
+            QPushButton:hover {{ background-color: {secondary}; }}
+        """)
         explore_btn.clicked.connect(lambda: on_explore(movie))
         
         self.wishlist_btn = QPushButton()
@@ -211,12 +213,16 @@ class HeroBanner(QWidget):
         self.update_buttons()
 
     def update_buttons(self):
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        rgba_base = ThemeManager.THEMES[ThemeManager.get_current_theme_name()]["rgba_base"]
+        
         status = self.movie.get("status")
         if status == "watch_later":
             self.wishlist_btn.setText("✓ Wishlisted")
-            self.wishlist_btn.setStyleSheet("""
-                QPushButton { background: transparent; border: 1px solid #1AE0A1; color: #1AE0A1; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; }
-                QPushButton:hover { background: rgba(26, 224, 161, 0.1); }
+            self.wishlist_btn.setStyleSheet(f"""
+                QPushButton {{ background: transparent; border: 1px solid {primary}; color: {primary}; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; }}
+                QPushButton:hover {{ background: rgba({rgba_base}, 0.1); }}
             """)
         else:
             self.wishlist_btn.setText("+ Add to Wishlist")
@@ -224,9 +230,6 @@ class HeroBanner(QWidget):
                 QPushButton { background: transparent; border: 1px solid #A0AEC0; color: #A0AEC0; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; }
                 QPushButton:hover { background: rgba(255,255,255,0.1); border-color: white; color: white; }
             """)
-            
-        from ui.theme_manager import ThemeManager
-        self.wishlist_btn.setStyleSheet(ThemeManager.format_style(self.wishlist_btn.styleSheet()))
 
     def paintEvent(self, event):
         from PySide6.QtGui import QColor, QPainter, QImage, QPixmap
@@ -339,10 +342,12 @@ class HeroCarousel(QWidget):
             self.inner.move(-self.width() * 0, 0)
         
     def update_dots(self):
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
         real_idx = self.current_idx % len(self.movies) if self.movies else 0
         for i, dot in enumerate(self.dots):
             if i == real_idx:
-                dot.setStyleSheet("background-color: #1AE0A1; border-radius: 6px; border: none;")
+                dot.setStyleSheet(f"background-color: {primary}; border-radius: 6px; border: none;")
             else:
                 dot.setStyleSheet("background-color: #4A5568; border-radius: 6px; border: none;")
                 
@@ -958,14 +963,6 @@ class DiscoverFilterBar(QWidget):
                   "with_origin_country", "primary_release_date.gte", 
                   "primary_release_date.lte", "vote_average.gte", "query"]
         self.base_params = {k: v for k, v in params.items() if k not in ui_keys}
-            
-        main_win = self.window()
-        if hasattr(main_win, "search_bar"):
-            if "query" in params:
-                main_win.search_bar.setText(params["query"])
-            else:
-                main_win.search_bar.clear()
-
         if "show_me" in params:
             idx = self.show_me_combo.findData(params["show_me"])
             self.show_me_combo.setCurrentIndex(max(0, idx))

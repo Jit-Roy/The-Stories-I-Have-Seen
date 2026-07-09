@@ -16,7 +16,8 @@ class SeasonCard(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(5)
         
-        self.poster_lbl = QLabel()
+        from ui.movie_card import RoundedImage
+        self.poster_lbl = RoundedImage()
         self.poster_lbl.setFixedSize(width, int(width * 1.5))
         self.poster_lbl.setStyleSheet("background-color: #2D3748; border-radius: 8px;")
         self.poster_lbl.setAlignment(Qt.AlignCenter)

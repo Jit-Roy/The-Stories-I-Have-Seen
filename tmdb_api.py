@@ -508,20 +508,25 @@ def advanced_discover(params, page=1, media_type="movie"):
             _search_cache[cache_key] = filtered
 
         filtered = _search_cache[cache_key]
-        start_idx = (page - 1) * 20
-        end_idx = start_idx + 20
-        results = inject_db_status([formatter(m) for m in filtered[start_idx:end_idx]])
 
+        # Apply show_me to the ENTIRE cached list before paginating,
+        # so pages always contain up to 20 visible items and "Load More"
+        # is never hidden early because a single page happened to be all-watched.
+        all_formatted = inject_db_status([formatter(m) for m in filtered])
         if show_me == "unseen":
-            results = [m for m in results if m["status"] != "watched"]
+            all_formatted = [m for m in all_formatted if m["status"] != "watched"]
+        elif show_me == "unseen_unwishlisted":
+            all_formatted = [m for m in all_formatted if m["status"] not in ("watched", "watch_later")]
 
-        return results
+        start_idx = (page - 1) * 20
+        end_idx   = start_idx + 20
+        return all_formatted[start_idx:end_idx]
 
     # ── Discover (no query) ──────────────────────────────────────────────────
     PAGE_SIZE = 20
     MAX_PAGES_PER_CALL = 10
 
-    if show_me != "unseen":
+    if show_me not in ("unseen", "unseen_unwishlisted"):
         api_params = {"language": "en-US", "page": page}
         
         # fix param translation for tv
@@ -537,12 +542,16 @@ def advanced_discover(params, page=1, media_type="movie"):
         return results
 
     params_key = str(sorted(params.items()))
-    cursor_key = f"__unseen_cursor_{params_key}_{media_type}"
+    cursor_key   = f"__unseen_cursor_{params_key}_{media_type}"
+    overflow_key = f"__unseen_overflow_{params_key}_{media_type}"
+
     if page == 1:
         _search_cache[cursor_key] = 1
+        _search_cache[overflow_key] = []
 
     tmdb_page = _search_cache.get(cursor_key, 1)
-    collected = []
+    # Start with any leftover items from the previous logical page
+    collected = list(_search_cache.get(overflow_key, []))
     pages_fetched = 0
 
     while len(collected) < PAGE_SIZE and pages_fetched < MAX_PAGES_PER_CALL:
@@ -561,7 +570,12 @@ def advanced_discover(params, page=1, media_type="movie"):
             break
 
         batch = inject_db_status([formatter(m) for m in raw])
-        unseen = [m for m in batch if m["status"] != "watched"]
+        if show_me == "unseen":
+            unseen = [m for m in batch if m["status"] != "watched"]
+        elif show_me == "unseen_unwishlisted":
+            unseen = [m for m in batch if m["status"] not in ("watched", "watch_later")]
+        else:
+            unseen = batch
         collected.extend(unseen)
 
         tmdb_page += 1
@@ -570,7 +584,9 @@ def advanced_discover(params, page=1, media_type="movie"):
         if tmdb_page > total_tmdb_pages:
             break
 
-    _search_cache[cursor_key] = tmdb_page
+    # Save overflow for the next logical page instead of discarding
+    _search_cache[cursor_key]   = tmdb_page
+    _search_cache[overflow_key] = collected[PAGE_SIZE:]
     return collected[:PAGE_SIZE]
 # ---------------------------------------------------------------------------
 # Discovery for Analytics

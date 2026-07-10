@@ -88,7 +88,7 @@ class TvPage(QWidget):
         fetch_params = params.copy()
         query = fetch_params.get("query")
         title = f"Search Results: '{query}'" if query else "Discover Results"
-        self.on_view_all(title, lambda page: tmdb_api.advanced_discover(fetch_params, page=page, media_type="tv"), fetch_params)
+        self.on_view_all(title, lambda page: tmdb_api.advanced_discover(fetch_params, page=page, media_type="tv"), fetch_params, media_type="tv")
 
     # ------------------------------------------------------------------
     # Async loading — launch all workers concurrently

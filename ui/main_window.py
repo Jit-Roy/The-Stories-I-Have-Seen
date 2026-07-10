@@ -440,7 +440,7 @@ class MainWindow(QMainWindow):
         fetch_func = lambda page=1: tmdb_api.advanced_discover(params, page=page)
         self.show_grid_view(title, fetch_func, initial_params=params)
 
-    def show_grid_view(self, title, fetch_func, initial_params=None, card_renderer=None, show_filter_bar=True):
+    def show_grid_view(self, title, fetch_func, initial_params=None, card_renderer=None, show_filter_bar=True, media_type="movie"):
         t_stack = self.main_stack.currentWidget()
         if not isinstance(t_stack, TabStack) or not t_stack.grid_page:
             # If triggered from somewhere without a grid (like downloads), force switch to Home
@@ -458,13 +458,14 @@ class MainWindow(QMainWindow):
                 "fetch_func": getattr(t_stack.grid_page, "fetch_func", fetch_func),
                 "initial_params": getattr(t_stack.grid_page, "initial_params", initial_params),
                 "card_renderer": getattr(t_stack.grid_page, "card_renderer", card_renderer),
-                "show_filter_bar": getattr(t_stack.grid_page, "show_filter_bar", show_filter_bar)
+                "show_filter_bar": getattr(t_stack.grid_page, "show_filter_bar", show_filter_bar),
+                "media_type": getattr(t_stack.grid_page, "_grid_media_type", media_type)
             }
             
         t_stack.page_history.append((current_index, state))
         
         t_stack.is_text_search = initial_params is not None and "query" in initial_params
-        t_stack.grid_page.load_grid(title, fetch_func, initial_params, card_renderer, show_filter_bar)
+        t_stack.grid_page.load_grid(title, fetch_func, initial_params, card_renderer, show_filter_bar, media_type)
         t_stack.setCurrentIndex(2)
 
     def setup_top_nav(self):
@@ -597,8 +598,9 @@ class MainWindow(QMainWindow):
 
         # Hitting Enter in the search bar acts exactly like clicking "Discover"
         if t_stack.currentIndex() == 2 and getattr(t_stack, "is_text_search", False):
-            if hasattr(t_stack.grid_page, "filter_bar") and t_stack.grid_page.filter_bar.isVisible():
-                t_stack.grid_page.filter_bar._apply()
+            fb = getattr(t_stack.grid_page, "filter_bar", None)
+            if fb is not None and fb.isVisible():
+                fb._apply()
             elif t_stack.tab_index == 0:
                 _do_discover_search()
         elif t_stack.tab_index == 0:
@@ -643,7 +645,8 @@ class MainWindow(QMainWindow):
                 state.get("fetch_func"),
                 state.get("initial_params"),
                 state.get("card_renderer"),
-                state.get("show_filter_bar", True)
+                state.get("show_filter_bar", True),
+                state.get("media_type", "movie")
             )
         elif prev_index == 3 and state and t_stack.person_page:
             t_stack.person_page.person_id = state
@@ -683,8 +686,9 @@ class MainWindow(QMainWindow):
         if inner_index == 0 and t_stack.tab_index in (0, 1, 2):
             self.search_wrapper.setVisible(True)
         elif inner_index == 2 and getattr(t_stack, "is_text_search", False):
-            if hasattr(t_stack.grid_page, "filter_bar"):
-                self.search_wrapper.setVisible(t_stack.grid_page.filter_bar.isVisible())
+            fb = getattr(t_stack.grid_page, "filter_bar", None)
+            if fb is not None:
+                self.search_wrapper.setVisible(fb.isVisible())
             else:
                 self.search_wrapper.setVisible(True)
         else:

@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QScrollArea
 from PySide6.QtCore import Qt
 from ui.movie_card import MovieCard
-from ui.components import FlowLayout, ResizableScrollArea, DiscoverFilterBar
+from ui.components import FlowLayout, ResizableScrollArea
 
 class GridPage(QWidget):
     def __init__(self, go_back_callback, change_status_callback, on_click_callback):
@@ -35,10 +35,12 @@ class GridPage(QWidget):
         
         self.layout.addLayout(header_layout)
         
-        self.filter_bar = DiscoverFilterBar()
-        self.filter_bar.hide()
-        self.filter_bar.signals.filters_applied.connect(self.apply_new_filters)
-        self.layout.addWidget(self.filter_bar)
+        # ── Filter bar slot ──────────────────────────────────────────────────────
+        # We DON'T create a filter bar here. Instead, load_grid() creates a brand
+        # new DiscoverFilterBar for every grid context, so there is zero shared
+        # state between different grid views.
+        self.filter_bar = None          # holds the current bar (or None)
+        self._filter_bar_index = 1      # layout index where the bar is inserted
         
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
@@ -73,44 +75,135 @@ class GridPage(QWidget):
         from ui.theme_manager import ThemeManager
         ThemeManager.apply_theme_to_widget(self)
         
+    def _replace_filter_bar(self, show_filter_bar, initial_params):
+        """Destroy the old filter bar (if any) and create a fresh one for this grid context."""
+        # Remove and delete the old filter bar
+        if self.filter_bar is not None:
+            self.layout.removeWidget(self.filter_bar)
+            self.filter_bar.hide()
+            self.filter_bar.deleteLater()
+            self.filter_bar = None
+
+        if not show_filter_bar:
+            return
+
+        from ui.components import DiscoverFilterBar
+        import tmdb_api
+
+        # Brand new instance — zero memory of any previous search
+        bar = DiscoverFilterBar(track_global_state=False)
+        bar.populate_genres(tmdb_api.get_genres())
+        bar.populate_languages(tmdb_api.get_languages())
+        bar.populate_countries(tmdb_api.get_countries())
+        bar.set_params(initial_params if initial_params else {})
+        bar.signals.filters_applied.connect(self.apply_new_filters)
+
+        # Insert at position 1 (after the header layout)
+        self.layout.insertWidget(self._filter_bar_index, bar)
+        self.filter_bar = bar
+
     def clear_grid(self):
         self.flow_layout.clear()
                 
-    def load_grid(self, title, fetch_func, initial_params=None, card_renderer=None, show_filter_bar=True):
+    def load_grid(self, title, fetch_func, initial_params=None, card_renderer=None, show_filter_bar=True, media_type="movie"):
         self.current_title = title
         self.initial_params = initial_params
         self.show_filter_bar = show_filter_bar
+        self._grid_media_type = media_type          # needed for rebuilding advanced_discover
         self.title_label.setText(title)
         self.clear_grid()
+        self.seen_movie_ids = set()
         self.current_page = 1
         self.fetch_func = fetch_func
+        self._original_fetch_func = fetch_func  # ── Save original source of truth
+        self._current_show_me = None             # ── No filter initially
         self.card_renderer = card_renderer
         self.load_more_btn.show()
         
-        if show_filter_bar:
-            import tmdb_api
-            self.filter_bar.populate_genres(tmdb_api.get_genres())
-            self.filter_bar.populate_languages(tmdb_api.get_languages())
-            self.filter_bar.populate_countries(tmdb_api.get_countries())
-            self.filter_bar.set_params(initial_params if initial_params else {})
-            self.filter_bar.show()
-        else:
-            self.filter_bar.hide()
+        # Create a fresh, isolated filter bar for this grid context
+        self._replace_filter_bar(show_filter_bar, initial_params)
             
         self.load_next_page()
         
     def apply_new_filters(self, params):
-        import tmdb_api
-        fetch_params = params.copy()
-        self.fetch_func = lambda page: tmdb_api.advanced_discover(fetch_params, page=page)
-        
-        query = fetch_params.get("query")
-        if query:
-            self.title_label.setText(f"Search Results: '{query}'")
+        """
+        Two modes:
+
+        1. Discover-based grids (initial_params is set — A24, Marvel, filmography, etc.)
+           Rebuild fetch_func using advanced_discover with the FULL new params so that
+           date-range, genre, rating AND show_me all work correctly.
+
+        2. Custom-fetch grids (initial_params is None — Similar Movies, Recommendations)
+           The underlying API doesn't support generic discover params, so only wrap
+           _original_fetch_func with a stateful show_me filter.
+        """
+        show_me = params.get("show_me")
+        self._current_show_me = show_me
+
+        if self.initial_params is not None:
+            # ── Discover-based grid ─────────────────────────────────────────
+            # advanced_discover handles all three show_me values internally
+            # (via its accumulator loop for unseen/unseen_unwishlisted),
+            # so we just rebuild with the full emitted params.
+            import tmdb_api
+            fetch_params   = params.copy()
+            media_type     = self._grid_media_type
+            self.fetch_func = lambda page, _fp=fetch_params, _mt=media_type: \
+                tmdb_api.advanced_discover(_fp, page=page, media_type=_mt)
+            # Update _original_fetch_func so subsequent filter changes also work
+            self._original_fetch_func = self.fetch_func
+
         else:
-            self.title_label.setText("Discover Results")
-            
+            # ── Custom-fetch grid ────────────────────────────────────────────
+            # Restore the original fetch_func, then optionally wrap with
+            # a stateful show_me filter.
+            self.fetch_func = self._original_fetch_func
+
+            if show_me and show_me != "all":
+                original    = self._original_fetch_func
+                PAGE_SIZE   = 20
+                MAX_FETCHES = 15
+                state = {"api_page": 1, "buffer": [], "done": False}
+
+                def filtered_fetch(page, _show_me=show_me, _orig=original, _s=state):
+                    if page == 1:
+                        _s["api_page"] = 1
+                        _s["buffer"]   = []
+                        _s["done"]     = False
+
+                    fetches = 0
+                    while len(_s["buffer"]) < PAGE_SIZE and not _s["done"] and fetches < MAX_FETCHES:
+                        raw = _orig(_s["api_page"])
+                        _s["api_page"] += 1
+                        fetches += 1
+
+                        if not raw:
+                            _s["done"] = True
+                            break
+                        if len(raw) < PAGE_SIZE:
+                            _s["done"] = True
+
+                        if _show_me == "unseen":
+                            kept = [m for m in raw if m.get("status") != "watched"]
+                        elif _show_me == "unseen_unwishlisted":
+                            kept = [m for m in raw if m.get("status") not in ("watched", "watch_later")]
+                        else:
+                            kept = raw
+
+                        _s["buffer"].extend(kept)
+
+                    out          = _s["buffer"][:PAGE_SIZE]
+                    _s["buffer"] = _s["buffer"][PAGE_SIZE:]
+                    return out
+
+                self.fetch_func = filtered_fetch
+
+        query = params.get("query")
+        if query:
+            self.current_title = f"Search Results: '{query}'"
+        self.title_label.setText(self.current_title)
         self.clear_grid()
+        self.seen_movie_ids = set()
         self.current_page = 1
         self.load_more_btn.show()
         self.load_next_page()
@@ -123,6 +216,12 @@ class GridPage(QWidget):
             return
             
         for movie in movies:
+            movie_id = movie.get("id")
+            if movie_id in getattr(self, "seen_movie_ids", set()):
+                continue
+            if hasattr(self, "seen_movie_ids"):
+                self.seen_movie_ids.add(movie_id)
+                
             if getattr(self, 'card_renderer', None):
                 self.flow_layout.add_widget(self.card_renderer(movie))
             else:

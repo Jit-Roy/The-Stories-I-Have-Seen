@@ -670,11 +670,12 @@ class DiscoverFilterBarSignals(QObject):
 GLOBAL_FILTER_STATE = {}
 
 class DiscoverFilterBar(QWidget):
-    def __init__(self):
+    def __init__(self, track_global_state=True):
         super().__init__()
         self.signals = DiscoverFilterBarSignals()
         self.base_params = {}
         self._pending_params = {}
+        self._track_global_state = track_global_state  # False for context-specific grids
 
         # ── Design tokens ─────────────────────────────────────────────────────
         BASE       = "#141720"   # control resting background
@@ -782,6 +783,7 @@ class DiscoverFilterBar(QWidget):
         self.show_me_combo.setStyleSheet(combo_style)
         self.show_me_combo.addItem("Everything", "all")
         self.show_me_combo.addItem("Movies I Haven't Seen", "unseen")
+        self.show_me_combo.addItem("Not Seen or Wishlisted", "unseen_unwishlisted")
 
         # GENRES (multi-select, styled identically)
         self.genre_combo = MultiSelectComboBox("All Genres")
@@ -963,6 +965,7 @@ class DiscoverFilterBar(QWidget):
                   "with_origin_country", "primary_release_date.gte", 
                   "primary_release_date.lte", "vote_average.gte", "query"]
         self.base_params = {k: v for k, v in params.items() if k not in ui_keys}
+
         if "show_me" in params:
             idx = self.show_me_combo.findData(params["show_me"])
             self.show_me_combo.setCurrentIndex(max(0, idx))
@@ -1050,7 +1053,6 @@ class DiscoverFilterBar(QWidget):
         rating = self.rating_combo.currentData()
         if rating:
             params["vote_average.gte"] = rating
-            params["vote_count.gte"] = 100
 
         # Hook up the main search bar to combine keyword and filters
         main_win = self.window()
@@ -1059,8 +1061,12 @@ class DiscoverFilterBar(QWidget):
             if query:
                 params["query"] = query
 
-        global GLOBAL_FILTER_STATE
-        GLOBAL_FILTER_STATE.clear()
-        GLOBAL_FILTER_STATE.update(params)
+        # Only update global state for top-level filter bars (Movies/TV tabs).
+        # Grid-page filter bars are context-specific and must NOT pollute the
+        # global state with params like with_companies, with_cast, etc.
+        if self._track_global_state:
+            global GLOBAL_FILTER_STATE
+            GLOBAL_FILTER_STATE.clear()
+            GLOBAL_FILTER_STATE.update(params)
 
         self.signals.filters_applied.emit(params)

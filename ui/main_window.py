@@ -379,12 +379,29 @@ class MainWindow(QMainWindow):
         t_stack.person_page.load_person(person_id)
         t_stack.setCurrentIndex(3)
 
+    def _get_current_page_state(self, t_stack):
+        current_index = t_stack.currentIndex()
+        if current_index == 1:
+            return t_stack.detail_page.movie_data
+        elif current_index == 2:
+            return {
+                "title": getattr(t_stack.grid_page, "current_title", t_stack.grid_page.title_label.text()),
+                "fetch_func": getattr(t_stack.grid_page, "fetch_func", None),
+                "initial_params": getattr(t_stack.grid_page, "initial_params", getattr(t_stack.grid_page, "current_params", None)),
+                "card_renderer": getattr(t_stack.grid_page, "card_renderer", None),
+                "show_filter_bar": getattr(t_stack.grid_page, "show_filter_bar", t_stack.grid_page.filter_bar.isVisible()),
+                "media_type": getattr(t_stack.grid_page, "_grid_media_type", getattr(t_stack.grid_page, "media_type", "movie"))
+            }
+        elif current_index == 3:
+            return getattr(t_stack.person_page, "person_id", None)
+        return None
+
     def show_season_detail(self, tv_id, tv_name, season_number):
         t_stack = self.main_stack.currentWidget()
         if not isinstance(t_stack, TabStack) or not t_stack.season_page: return
         
         current_index = t_stack.currentIndex()
-        state = t_stack.detail_page.movie_data if current_index == 1 else None
+        state = self._get_current_page_state(t_stack)
         t_stack.page_history.append((current_index, state))
         
         t_stack.season_page.load_season(tv_id, tv_name, season_number)
@@ -395,7 +412,7 @@ class MainWindow(QMainWindow):
         if not isinstance(t_stack, TabStack) or not t_stack.detail_page: return
         
         current_index = t_stack.currentIndex()
-        state = t_stack.detail_page.movie_data if current_index == 1 else None
+        state = self._get_current_page_state(t_stack)
         t_stack.page_history.append((current_index, state))
         
         # Inject fresh DB status so buttons are correct from the very first render
@@ -451,20 +468,7 @@ class MainWindow(QMainWindow):
             t_stack = self.tab_stacks[0]
             
         current_index = t_stack.currentIndex()
-        
-        state = None
-        if current_index == 1:
-            state = t_stack.detail_page.movie_data
-        elif current_index == 2:
-            state = {
-                "title": getattr(t_stack.grid_page, "current_title", title),
-                "fetch_func": getattr(t_stack.grid_page, "fetch_func", fetch_func),
-                "initial_params": getattr(t_stack.grid_page, "initial_params", initial_params),
-                "card_renderer": getattr(t_stack.grid_page, "card_renderer", card_renderer),
-                "show_filter_bar": getattr(t_stack.grid_page, "show_filter_bar", show_filter_bar),
-                "media_type": getattr(t_stack.grid_page, "_grid_media_type", media_type)
-            }
-            
+        state = self._get_current_page_state(t_stack)
         t_stack.page_history.append((current_index, state))
         
         t_stack.is_text_search = initial_params is not None and "query" in initial_params

@@ -16,6 +16,8 @@ SEASON_CACHE = {}
 class _SeasonWorkerSignals(QObject):
     finished = Signal(dict)
 
+import threading
+_worker_lock = threading.Lock()
 ACTIVE_WORKERS = set()
 
 class _SeasonWorker(QRunnable):
@@ -24,14 +26,19 @@ class _SeasonWorker(QRunnable):
         self.tv_id = tv_id
         self.season_number = season_number
         self.signals = _SeasonWorkerSignals()
-        ACTIVE_WORKERS.add(self)
+        with _worker_lock:
+            ACTIVE_WORKERS.add(self)
 
     def run(self):
         try:
             data = tmdb_api.get_tv_season_details(self.tv_id, self.season_number)
-            self.signals.finished.emit(data if data else {})
+            try:
+                self.signals.finished.emit(data if data else {})
+            except RuntimeError:
+                pass
         finally:
-            ACTIVE_WORKERS.discard(self)
+            with _worker_lock:
+                ACTIVE_WORKERS.discard(self)
 
 class EpisodeCard(QFrame):
     def __init__(self, episode, tv_id, season_number, download_manager):

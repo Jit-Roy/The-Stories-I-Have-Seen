@@ -15,6 +15,7 @@ _MEM_CACHE_MAX = 300            # max number of images kept in RAM
 _mem_cache: dict[str, bytes] = {}   # url -> raw bytes (insertion-ordered in Python 3.7+)
 import threading
 _cache_lock = threading.Lock()
+_loader_lock = threading.Lock()
 ACTIVE_LOADERS = set()
 
 
@@ -75,7 +76,8 @@ class ImageLoader(QRunnable):
         super().__init__()
         self.url = url
         self.signals = ImageLoaderSignals()
-        ACTIVE_LOADERS.add(self)
+        with _loader_lock:
+            ACTIVE_LOADERS.add(self)
 
     @staticmethod
     def get_cached_image(url):
@@ -109,7 +111,8 @@ class ImageLoader(QRunnable):
             except RuntimeError:
                 pass
         finally:
-            ACTIVE_LOADERS.discard(self)
+            with _loader_lock:
+                ACTIVE_LOADERS.discard(self)
 
 
 class RoundedImage(QLabel):

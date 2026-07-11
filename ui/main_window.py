@@ -81,7 +81,10 @@ class _StatusWorker(QRunnable):
             media_type=self.movie_data.get("media_type", "movie")
         )
         tmdb_api.invalidate_db_cache()
-        self.signals.finished.emit(self.movie_data, self.new_status)
+        try:
+            self.signals.finished.emit(self.movie_data, self.new_status)
+        except RuntimeError:
+            pass
 
 
 class MainWindow(QMainWindow):

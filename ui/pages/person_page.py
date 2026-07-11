@@ -24,7 +24,10 @@ class _PersonWorker(QRunnable):
         except Exception as e:
             print(f"Error fetching person {self.person_id}: {e}")
             data = None
-        self.signals.finished.emit(data or {})
+        try:
+            self.signals.finished.emit(data or {})
+        except RuntimeError:
+            pass
 
 class PersonPage(QWidget):
     def __init__(self, go_back_callback, change_status_callback, show_detail_callback, show_grid_callback=None):

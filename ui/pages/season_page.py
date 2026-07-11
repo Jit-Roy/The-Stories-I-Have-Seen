@@ -100,20 +100,21 @@ class EpisodeCard(QFrame):
         btns_layout = QHBoxLayout()
         btns_layout.setSpacing(10)
         
+        primary = ThemeManager.get_color("primary")
         self.btn_play = QPushButton("▶ Play")
-        self.btn_play.setStyleSheet("""
-            QPushButton {
+        self.btn_play.setStyleSheet(f"""
+            QPushButton {{
                 background-color: transparent;
-                border: 1px solid #1AE0A1;
-                color: #1AE0A1;
+                border: 1px solid {primary};
+                color: {primary};
                 padding: 10px 20px;
                 border-radius: 6px;
                 font-weight: bold;
                 font-size: 14px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: rgba(255, 255, 255, 0.1);
-            }
+            }}
         """)
         self.btn_play.setCursor(QCursor(Qt.PointingHandCursor))
         self.btn_play.clicked.connect(self._on_play)

@@ -242,7 +242,9 @@ class AnalyticsPage(QWidget):
             l.addWidget(v)
             return w
             
-        stats_layout.addWidget(create_stat_widget("Total Time Watched", f"{hours:,} Hours", "#1AE0A1"))
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        stats_layout.addWidget(create_stat_widget("Total Time Watched", f"{hours:,} Hours", primary))
         stats_layout.addStretch()
         stats_layout.addWidget(create_stat_widget("Movies Watched", f"{watched_movies_count:,}", "#00C6FF"))
         stats_layout.addStretch()

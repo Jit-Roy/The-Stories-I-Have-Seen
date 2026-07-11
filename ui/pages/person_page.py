@@ -173,8 +173,10 @@ class PersonPage(QWidget):
             details_str.append(data.get("place_of_birth"))
             
         if details_str:
+            from ui.theme_manager import ThemeManager
+            primary = ThemeManager.get_color("primary")
             det_lbl = QLabel(" | ".join(details_str))
-            det_lbl.setStyleSheet("font-size: 14px; color: #1AE0A1; font-weight: bold;")
+            det_lbl.setStyleSheet(f"font-size: 14px; color: {primary}; font-weight: bold;")
             info_layout.addWidget(det_lbl)
             info_layout.addSpacing(10)
 

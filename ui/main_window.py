@@ -325,6 +325,47 @@ class MainWindow(QMainWindow):
             r_str, g_str, b_str = ThemeManager.THEMES[ThemeManager.get_current_theme_name()]["rgba_base"].split(",")
             from PySide6.QtGui import QColor
             self.search_glow.setColor(QColor(int(r_str), int(g_str), int(b_str), 70))
+            
+        # Update CSS styling for all nav buttons
+        from ui.theme_manager import ThemeManager
+        primary = ThemeManager.get_color("primary")
+        
+        nav_style = f"""
+            QPushButton {{
+                background-color: transparent; color: #A0AEC0; text-align: left;
+                padding: 12px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; border: none;
+            }}
+            QPushButton:hover {{
+                color: #FFFFFF; background-color: #1A1C23;
+            }}
+            QPushButton:checked {{
+                color: {primary}; background-color: rgba(255, 255, 255, 0.05); border-left: 3px solid {primary};
+                border-top-left-radius: 0px; border-bottom-left-radius: 0px;
+            }}
+        """
+        
+        sub_nav_style = f"""
+            QPushButton {{
+                background-color: transparent; color: #A0AEC0; text-align: left;
+                padding: 8px 16px 8px 24px; font-size: 13px; font-weight: 500; border: none;
+                border-left: 2px solid #2D3748; margin-left: 24px; margin-right: 16px;
+            }}
+            QPushButton:hover {{
+                color: #FFFFFF;
+            }}
+            QPushButton:checked {{
+                color: {primary}; border-left: 2px solid {primary};
+            }}
+        """
+
+        self.discover_btn.setStyleSheet(nav_style)
+        self.movies_btn.setStyleSheet(nav_style)
+        self.tv_btn.setStyleSheet(nav_style)
+        self.col_btn.setStyleSheet(sub_nav_style)
+        self.wish_btn.setStyleSheet(sub_nav_style)
+        self.analytics_btn.setStyleSheet(sub_nav_style)
+        self.downloads_btn.setStyleSheet(nav_style)
+        self.settings_btn.setStyleSheet(nav_style)
 
     def switch_page(self, index, active_btn):
         old_index = self.main_stack.currentIndex()

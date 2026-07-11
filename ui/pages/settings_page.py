@@ -14,61 +14,64 @@ class SettingsPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("settingsPage")
-        self.setStyleSheet("""
-            QWidget#settingsPage {
+        primary = ThemeManager.get_color("primary")
+        primary_hover = ThemeManager.get_color("primary_hover")
+
+        self.setStyleSheet(f"""
+            QWidget#settingsPage {{
                 background-color: #0B0D14;
-            }
-            QLabel {
+            }}
+            QLabel {{
                 color: #FFFFFF;
                 font-family: 'Segoe UI', Arial, sans-serif;
-            }
-            QLineEdit {
+            }}
+            QLineEdit {{
                 background-color: #1A1C23;
                 border: 1px solid #2D3243;
                 border-radius: 8px;
                 padding: 12px;
                 color: #FFFFFF;
                 font-size: 14px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #1AE0A1;
-            }
-            QLineEdit[readOnly="true"] {
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {primary};
+            }}
+            QLineEdit[readOnly="true"] {{
                 background-color: transparent;
                 border: 1px solid transparent;
                 color: #A0AEC0;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 font-weight: bold;
                 font-size: 14px;
                 border-radius: 8px;
                 padding: 10px 20px;
                 border: none;
-            }
-            QPushButton#saveBtn {
-                background-color: #1AE0A1;
+            }}
+            QPushButton#saveBtn {{
+                background-color: {primary};
                 color: #0B0D14;
-            }
-            QPushButton#saveBtn:hover {
+            }}
+            QPushButton#saveBtn:hover {{
                 font-size: 15px;
-                background-color: #14B885;
-            }
-            QPushButton#editBtn {
+                background-color: {primary_hover};
+            }}
+            QPushButton#editBtn {{
                 background-color: rgba(255, 255, 255, 0.05);
                 color: #FFFFFF;
                 border: 1px solid #2D3243;
-            }
-            QPushButton#editBtn:hover {
+            }}
+            QPushButton#editBtn:hover {{
                 background-color: rgba(255, 255, 255, 0.1);
-            }
-            QPushButton#cancelBtn {
+            }}
+            QPushButton#cancelBtn {{
                 background-color: transparent;
                 color: #A0AEC0;
-            }
-            QPushButton#cancelBtn:hover {
+            }}
+            QPushButton#cancelBtn:hover {{
                 color: #FFFFFF;
                 background-color: rgba(255, 255, 255, 0.05);
-            }
+            }}
         """)
 
         layout = QVBoxLayout(self)
@@ -93,7 +96,7 @@ class SettingsPage(QWidget):
         card_layout.setSpacing(16)
 
         section_title = QLabel("TMDB API Configuration")
-        section_title.setStyleSheet("font-size: 18px; font-weight: 600; color: #1AE0A1;")
+        section_title.setStyleSheet(f"font-size: 18px; font-weight: 600; color: {primary};")
         card_layout.addWidget(section_title)
 
         desc = QLabel("Enter your TMDB API Key below. This is required for fetching movie details, posters, and search results.")
@@ -135,7 +138,7 @@ class SettingsPage(QWidget):
         self.cancel_btn.hide()
         
         self.status_msg = QLabel("")
-        self.status_msg.setStyleSheet("color: #1AE0A1; font-weight: 500;")
+        self.status_msg.setStyleSheet(f"color: {primary}; font-weight: 500;")
         self.status_msg.hide()
 
         btn_layout.addWidget(self.edit_btn)
@@ -155,7 +158,7 @@ class SettingsPage(QWidget):
         dl_card_layout.setSpacing(16)
         
         dl_title = QLabel("Download Directory")
-        dl_title.setStyleSheet("font-size: 18px; font-weight: 600; color: #1AE0A1;")
+        dl_title.setStyleSheet(f"font-size: 18px; font-weight: 600; color: {primary};")
         dl_card_layout.addWidget(dl_title)
         
         dl_desc = QLabel("Select the target folder where your movies and TV series downloads should be saved.")
@@ -187,7 +190,7 @@ class SettingsPage(QWidget):
         app_card_layout.setSpacing(16)
         
         app_title = QLabel("Appearance")
-        app_title.setStyleSheet("font-size: 18px; font-weight: 600; color: #1AE0A1;")
+        app_title.setStyleSheet(f"font-size: 18px; font-weight: 600; color: {primary};")
         app_card_layout.addWidget(app_title)
         
         app_desc = QLabel("Select your preferred accent color theme. Changes are applied instantly across the entire application.")

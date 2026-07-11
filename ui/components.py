@@ -259,12 +259,8 @@ class HeroBanner(QWidget):
         if not url:
             return
             
-        # Fast path: serve from cache synchronously
+        # Let ImageLoader handle both memory and disk caches asynchronously in the background.
         from ui.movie_card import ImageLoader
-        cached = ImageLoader.get_cached_image(url)
-        if cached:
-            self.on_image_loaded(cached)
-            return
             
         loader = ImageLoader(url)
         loader.signals.finished.connect(self.on_image_loaded)
@@ -415,13 +411,19 @@ class FlowLayout(QGridLayout):
         
         columns = max(1, width // 220)
         
-        # Don't reflow if columns haven't changed and widget count is the same
-        if columns == self._current_columns and self.count() == len(self._widgets):
+        # If columns haven't changed, we can just append the new widgets!
+        if columns == self._current_columns:
+            start_idx = self.count()
+            for i in range(start_idx, len(self._widgets)):
+                widget = self._widgets[i]
+                row = i // columns
+                col = i % columns
+                self.addWidget(widget, row, col)
             return
             
         self._current_columns = columns
         
-        # Take everything out of the grid
+        # Take everything out of the grid (only needed when window is resized and column count changes)
         while self.count():
             self.takeAt(0)
             

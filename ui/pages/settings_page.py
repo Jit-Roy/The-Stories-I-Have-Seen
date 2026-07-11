@@ -15,7 +15,7 @@ class SettingsPage(QWidget):
         super().__init__(parent)
         self.setObjectName("settingsPage")
         primary = ThemeManager.get_color("primary")
-        primary_hover = ThemeManager.get_color("primary_hover")
+        primary_hover = ThemeManager.lighten_hex(primary, 0.2)
 
         self.setStyleSheet(f"""
             QWidget#settingsPage {{

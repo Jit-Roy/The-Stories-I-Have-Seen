@@ -70,22 +70,15 @@ class CategoryCard(QWidget):
         
         if data.get("poster_path"):
             url = data["poster_path"]
-            cached = ImageLoader.get_cached_image(url)
-            if cached:
-                self._apply_image(cached)
-            else:
-                loader = ImageLoader(url)
-                loader.signals.finished.connect(self._apply_image)
-                QThreadPool.globalInstance().start(loader)
+            dpr = self.devicePixelRatioF()
+            loader = ImageLoader(url, target_size=(int(160 * dpr), int(240 * dpr)))
+            loader.signals.finished_img.connect(self._apply_image)
+            QThreadPool.globalInstance().start(loader)
         elif data.get("logo_path"):
             url = data["logo_path"]
-            cached = ImageLoader.get_cached_image(url)
-            if cached:
-                self._apply_logo(cached)
-            else:
-                loader = ImageLoader(url)
-                loader.signals.finished.connect(self._apply_logo)
-                QThreadPool.globalInstance().start(loader)
+            loader = ImageLoader(url) # Custom logic for logo scaling, handled in _apply_logo
+            loader.signals.finished.connect(self._apply_logo)
+            QThreadPool.globalInstance().start(loader)
                 
         # Overlay gradient for text readability
         self.overlay = QWidget(self.img)
@@ -119,15 +112,13 @@ class CategoryCard(QWidget):
 
         layout.addWidget(self.img)
 
-    def _apply_image(self, image_data):
-        if not image_data: return
-        from PySide6.QtGui import QImage, QPixmap
-        img = QImage()
-        if img.loadFromData(image_data):
-            dpr = self.devicePixelRatioF()
-            pixmap = QPixmap(img).scaled(int(160 * dpr), int(240 * dpr), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-            pixmap.setDevicePixelRatio(dpr)
-            self.img.setPixmap(pixmap)
+    def _apply_image(self, img):
+        if not img: return
+        from PySide6.QtGui import QPixmap
+        dpr = self.devicePixelRatioF()
+        pixmap = QPixmap(img)
+        pixmap.setDevicePixelRatio(dpr)
+        self.img.setPixmap(pixmap)
             
     def _apply_logo(self, image_data):
         if not image_data: return
@@ -189,13 +180,10 @@ class PersonCard(QWidget):
         self.img.setStyleSheet("background-color: #1A1C23; border-radius: 8px;") 
         if data.get("profile_path"):
             url = data["profile_path"]
-            cached = ImageLoader.get_cached_image(url)
-            if cached:
-                self._apply_image(cached)
-            else:
-                loader = ImageLoader(url)
-                loader.signals.finished.connect(self._apply_image)
-                QThreadPool.globalInstance().start(loader)
+            dpr = self.devicePixelRatioF()
+            loader = ImageLoader(url, target_size=(int(self.img_width * dpr), int(self.img_height * dpr)))
+            loader.signals.finished_img.connect(self._apply_image)
+            QThreadPool.globalInstance().start(loader)
 
         # Hover highlight overlay on the photo (hidden by default)
         self.hover_overlay = QWidget(self.img)
@@ -218,15 +206,13 @@ class PersonCard(QWidget):
         layout.addWidget(name)
         layout.addStretch()
 
-    def _apply_image(self, image_data):
-        if not image_data: return
-        from PySide6.QtGui import QImage, QPixmap
-        img = QImage()
-        if img.loadFromData(image_data):
-            dpr = self.devicePixelRatioF()
-            pixmap = QPixmap(img).scaled(int(self.img_width * dpr), int(self.img_height * dpr), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-            pixmap.setDevicePixelRatio(dpr)
-            self.img.setPixmap(pixmap)
+    def _apply_image(self, img):
+        if not img: return
+        from PySide6.QtGui import QPixmap
+        dpr = self.devicePixelRatioF()
+        pixmap = QPixmap(img)
+        pixmap.setDevicePixelRatio(dpr)
+        self.img.setPixmap(pixmap)
 
     def enterEvent(self, event):
         self.hover_overlay.show()

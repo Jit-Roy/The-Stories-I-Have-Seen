@@ -71,25 +71,20 @@ class ProfileCard(QWidget):
             return
             
         url = f"https://image.tmdb.org/t/p/w200{p_path}"
-        cached = ImageLoader.get_cached_image(url)
-        if cached:
-            self.on_image_loaded(cached)
-            return
-            
-        loader = ImageLoader(url)
-        loader.signals.finished.connect(self.on_image_loaded)
+        dpr = self.devicePixelRatioF()
+        target_w = int(120 * dpr)
+        target_h = int(180 * dpr)
+        loader = ImageLoader(url, target_size=(target_w, target_h))
+        loader.signals.finished_img.connect(self.on_image_loaded)
         QThreadPool.globalInstance().start(loader)
 
-    def on_image_loaded(self, data):
-        if data:
-            pm = QImage()
-            if pm.loadFromData(data):
-                dpr = self.devicePixelRatioF()
-                target_w = int(120 * dpr)
-                target_h = int(180 * dpr)
-                pixmap = QPixmap(pm).scaled(target_w, target_h, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-                pixmap.setDevicePixelRatio(dpr)
-                self.img_label.setPixmap(pixmap)
+    def on_image_loaded(self, img):
+        if img:
+            from PySide6.QtGui import QPixmap
+            dpr = self.devicePixelRatioF()
+            pixmap = QPixmap(img)
+            pixmap.setDevicePixelRatio(dpr)
+            self.img_label.setPixmap(pixmap)
 
 
 # ---------------------------------------------------------------------------
@@ -594,12 +589,8 @@ class MovieDetailPage(QWidget):
         self.btn_download.setEnabled(True)
         self.update_buttons()
 
-        # ── Fast-path: serve poster from cache if available ───────────
-        poster_path = movie_data.get("poster_path")
-        if poster_path:
-            cached = ImageLoader.get_cached_image(poster_path)
-            if cached:
-                self.on_poster_loaded(cached)
+        # Fast-path cache check removed to prevent synchronous disk reads.
+        # ImageLoader will handle both memory/disk cache and network asynchronously.
 
         # ── Smart Cache Check ─────────────────────────────────────────
         media_type = movie_data.get("media_type", "movie")
@@ -619,9 +610,9 @@ class MovieDetailPage(QWidget):
             bd_loader.signals.finished.connect(self.on_backdrop_loaded)
             QThreadPool.globalInstance().start(bd_loader)
 
-        if poster_path and not ImageLoader.get_cached_image(poster_path):
-            poster_loader = ImageLoader(poster_path)
-            poster_loader.signals.finished.connect(self.on_poster_loaded)
+        if movie_data.get("poster_path"):
+            poster_loader = ImageLoader(movie_data["poster_path"], target_size=(160, 240))
+            poster_loader.signals.finished_img.connect(self.on_poster_loaded)
             QThreadPool.globalInstance().start(poster_loader)
 
     # ------------------------------------------------------------------
@@ -963,9 +954,7 @@ class MovieDetailPage(QWidget):
             if img.loadFromData(image_data):
                 self.backdrop_container.setPixmap(QPixmap.fromImage(img))
 
-    def on_poster_loaded(self, image_data):
-        if image_data:
-            img = QImage()
-            if img.loadFromData(image_data):
-                pixmap = QPixmap(img).scaled(160, 240, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-                self.poster_label.setPixmap(pixmap)
+    def on_poster_loaded(self, img):
+        if img:
+            from PySide6.QtGui import QPixmap
+            self.poster_label.setPixmap(QPixmap(img))

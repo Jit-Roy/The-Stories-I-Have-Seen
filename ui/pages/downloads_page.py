@@ -267,26 +267,21 @@ class DownloadItemWidget(QFrame):
         if not url:
             return
 
-        cached = ImageLoader.get_cached_image(url)
-        if cached:
-            self._apply_image(cached)
-            return
-
-        loader = ImageLoader(url)
-        loader.signals.finished.connect(self.on_image_loaded)
+        dpr = self.devicePixelRatioF()
+        target_w = int(80 * dpr)
+        target_h = int(120 * dpr)
+        
+        loader = ImageLoader(url, target_size=(target_w, target_h))
+        loader.signals.finished_img.connect(self._apply_image)
         QThreadPool.globalInstance().start(loader)
 
-    def _apply_image(self, image_data: bytes):
-        if not image_data:
-            return
-        img = QImage()
-        if img.loadFromData(image_data):
-            dpr = self.devicePixelRatioF()
-            target_w = int(80 * dpr)
-            target_h = int(120 * dpr)
-            pixmap = QPixmap(img).scaled(target_w, target_h, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-            pixmap.setDevicePixelRatio(dpr)
-            self.poster_label.setPixmap(pixmap)
+    def _apply_image(self, img):
+        if not img: return
+        from PySide6.QtGui import QPixmap
+        dpr = self.devicePixelRatioF()
+        pixmap = QPixmap(img)
+        pixmap.setDevicePixelRatio(dpr)
+        self.poster_label.setPixmap(pixmap)
 
     def on_image_loaded(self, image_data):
         self._apply_image(image_data)

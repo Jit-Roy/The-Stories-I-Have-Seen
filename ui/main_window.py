@@ -227,20 +227,7 @@ class MainWindow(QMainWindow):
                 border-top-left-radius: 0px; border-bottom-left-radius: 0px;
             }
         """
-        
-        sub_nav_style = """
-            QPushButton {
-                background-color: transparent; color: #A0AEC0; text-align: left;
-                padding: 8px 16px 8px 24px; font-size: 13px; font-weight: 500; border: none;
-                border-left: 2px solid #2D3748; margin-left: 24px; margin-right: 16px;
-            }
-            QPushButton:hover {
-                color: #FFFFFF;
-            }
-            QPushButton:checked {
-                color: #1AE0A1; border-left: 2px solid #1AE0A1;
-            }
-        """
+        # Removed sub_nav_style to prevent buttons from looking like sub-menus
 
         self.discover_btn = QPushButton("  Discover")
         self.discover_btn.setStyleSheet(nav_style)
@@ -343,27 +330,14 @@ class MainWindow(QMainWindow):
                 border-top-left-radius: 0px; border-bottom-left-radius: 0px;
             }}
         """
-        
-        sub_nav_style = f"""
-            QPushButton {{
-                background-color: transparent; color: #A0AEC0; text-align: left;
-                padding: 8px 16px 8px 24px; font-size: 13px; font-weight: 500; border: none;
-                border-left: 2px solid #2D3748; margin-left: 24px; margin-right: 16px;
-            }}
-            QPushButton:hover {{
-                color: #FFFFFF;
-            }}
-            QPushButton:checked {{
-                color: {primary}; border-left: 2px solid {primary};
-            }}
-        """
+        # Removed sub_nav_style to prevent buttons from looking like sub-menus
 
         self.discover_btn.setStyleSheet(nav_style)
         self.movies_btn.setStyleSheet(nav_style)
         self.tv_btn.setStyleSheet(nav_style)
-        self.col_btn.setStyleSheet(sub_nav_style)
-        self.wish_btn.setStyleSheet(sub_nav_style)
-        self.analytics_btn.setStyleSheet(sub_nav_style)
+        self.col_btn.setStyleSheet(nav_style)
+        self.wish_btn.setStyleSheet(nav_style)
+        self.analytics_btn.setStyleSheet(nav_style)
         self.downloads_btn.setStyleSheet(nav_style)
         self.settings_btn.setStyleSheet(nav_style)
 

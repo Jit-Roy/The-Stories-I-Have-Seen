@@ -84,9 +84,8 @@ class ImageLoader(QRunnable):
         with _loader_lock:
             ACTIVE_LOADERS.add(self)
 
-    @staticmethod
-    def get_cached_image(url):
-        return _get_cached_image(url)
+    # Synchronous cache fetching removed to prevent UI thread blocking.
+    # ImageLoader.run() handles cache checks asynchronously.
 
     def run(self):
         try:

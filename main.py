@@ -75,6 +75,18 @@ def main():
         QMainWindow { background-color: #0A0B10; }
         QWidget { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-size: 14px; color: #FFFFFF; }
     """)
+    
+    # Pre-fetch static metadata in the background to ensure it's in the lru_cache
+    # when the user first opens a Grid view, preventing a UI thread freeze.
+    from PySide6.QtCore import QRunnable
+    class PrefetchWorker(QRunnable):
+        def run(self):
+            import tmdb_api
+            tmdb_api.get_genres(media_type="movie")
+            tmdb_api.get_genres(media_type="tv")
+            tmdb_api.get_languages()
+            tmdb_api.get_countries()
+    QThreadPool.globalInstance().start(PrefetchWorker())
             
     window = MainWindow()
     window.show()

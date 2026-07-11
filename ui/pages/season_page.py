@@ -383,6 +383,11 @@ class SeasonPage(QWidget):
                 
         # ── Smart Cache Store ─────────────────────────────────────────
         cache_key = (tv_id, season_number)
+        if len(SEASON_CACHE) > 100:
+            try:
+                SEASON_CACHE.pop(next(iter(SEASON_CACHE)))
+            except Exception:
+                pass
         SEASON_CACHE[cache_key] = data
 
         episodes = data.get("episodes", [])

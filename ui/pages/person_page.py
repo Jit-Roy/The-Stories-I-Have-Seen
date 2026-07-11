@@ -119,6 +119,11 @@ class PersonPage(QWidget):
             return
 
         # ── Smart Cache Store ─────────────────────────────────────────
+        if len(PERSON_CACHE) >= 100:
+            try:
+                PERSON_CACHE.pop(next(iter(PERSON_CACHE)))
+            except Exception:
+                pass
         PERSON_CACHE[data["id"]] = data
 
         self.profile_container = QWidget()
@@ -185,7 +190,8 @@ class PersonPage(QWidget):
 
         self.content_layout.addWidget(self.profile_container)
         
-        credits = data.get("credits", [])
+        import tmdb_api
+        credits = tmdb_api.inject_db_status(data.get("credits", []))
         if credits:
             self.content_layout.addSpacing(20)
             

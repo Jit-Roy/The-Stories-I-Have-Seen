@@ -639,6 +639,11 @@ class MovieDetailPage(QWidget):
         # ── Smart Cache Store ─────────────────────────────────────────
         media_type = details.get("media_type", self.movie_data.get("media_type", "movie"))
         cache_key = (details.get("id"), media_type)
+        if len(DETAILS_CACHE) > 100:
+            try:
+                DETAILS_CACHE.pop(next(iter(DETAILS_CACHE)))
+            except Exception:
+                pass
         DETAILS_CACHE[cache_key] = details
 
         # Re-inject fresh DB status (details cache may have been stale)

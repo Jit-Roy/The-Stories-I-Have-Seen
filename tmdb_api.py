@@ -48,6 +48,14 @@ def _get_db_status_map():
         _db_status_cache = {f"{m.get('media_type', 'movie')}_{m['id']}": m["status"] for m in database.get_movies()}
     return _db_status_cache
 
+def _enforce_cache_limit(cache_dict, max_size=300):
+    """Prevent unbounded memory growth using simple LRU-ish eviction."""
+    if len(cache_dict) > max_size:
+        try:
+            cache_dict.pop(next(iter(cache_dict)))
+        except Exception:
+            pass
+
 
 def invalidate_db_cache():
     """Call this whenever the database is written to."""
@@ -84,6 +92,7 @@ def _make_request(endpoint, params=None, retries=3):
             )
             response.raise_for_status()
             data = response.json()
+            _enforce_cache_limit(_search_cache)
             _search_cache[cache_key] = (time.time(), data)
             return data
         except requests.exceptions.ConnectionError:
@@ -261,6 +270,7 @@ def get_movie_details(movie_id):
     movie["recommendations"] = [_format_movie(m) for m in rec_data]
 
     result = inject_db_status([movie])[0]
+    _enforce_cache_limit(_details_cache)
     _details_cache[movie_id] = result
     return result
 
@@ -308,6 +318,7 @@ def get_tv_details(tv_id):
     tv["recommendations"] = [_format_tv(m) for m in rec_data]
 
     result = inject_db_status([tv])[0]
+    _enforce_cache_limit(_details_cache)
     _details_cache[f"tv_{tv_id}"] = result
     return result
 
@@ -411,9 +422,11 @@ def get_person_full_credits(person_id, page=1):
                 else:
                     formatted_credits.append(_format_movie(c))
             
+            _enforce_cache_limit(_person_credits_cache)
             _person_credits_cache[person_id] = formatted_credits
             
-    all_credits = _person_credits_cache[person_id]
+    # Use .get() to prevent KeyError if invalidate_db_cache clears the dict concurrently
+    all_credits = _person_credits_cache.get(person_id, [])
         
     # Manually paginate (20 items per page)
     start_idx = (page - 1) * 20
@@ -566,6 +579,7 @@ def advanced_discover(params, page=1, media_type="movie"):
             if tmdb_page > total_tmdb_pages:
                 break
 
+        _enforce_cache_limit(_search_cache)
         _search_cache[cursor_key] = tmdb_page
         out = collected[:PAGE_SIZE]
         _search_cache[overflow_key] = collected[PAGE_SIZE:]
@@ -633,6 +647,7 @@ def advanced_discover(params, page=1, media_type="movie"):
             break
 
     # Save overflow for the next logical page instead of discarding
+    _enforce_cache_limit(_search_cache)
     _search_cache[cursor_key]   = tmdb_page
     _search_cache[overflow_key] = collected[PAGE_SIZE:]
     return collected[:PAGE_SIZE]

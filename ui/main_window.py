@@ -419,6 +419,12 @@ class MainWindow(QMainWindow):
             }
         elif current_index == 3:
             return getattr(t_stack.person_page, "person_id", None)
+        elif current_index == 4:
+            return {
+                "tv_id": getattr(t_stack.season_page, "tv_id", None),
+                "tv_name": getattr(t_stack.season_page, "tv_name", ""),
+                "season_number": getattr(t_stack.season_page, "season_number", None)
+            }
         return None
 
     def show_season_detail(self, tv_id, tv_name, season_number):
@@ -668,19 +674,34 @@ class MainWindow(QMainWindow):
                 self.analytics_page.load_data()
 
         elif prev_index == 1 and state and t_stack.detail_page:
-            t_stack.detail_page.load_movie(state)
+            current_id = getattr(t_stack.detail_page, "movie_data", {}).get("id")
+            if current_id != state.get("id"):
+                t_stack.detail_page.load_movie(state)
+                
         elif prev_index == 2 and isinstance(state, dict):
-            t_stack.grid_page.load_grid(
-                state.get("title", ""),
-                state.get("fetch_func"),
-                state.get("initial_params"),
-                state.get("card_renderer"),
-                state.get("show_filter_bar", True),
-                state.get("media_type", "movie")
-            )
+            current_title = getattr(t_stack.grid_page, "current_title", "")
+            current_params = getattr(t_stack.grid_page, "initial_params", None)
+            if current_title != state.get("title") or current_params != state.get("initial_params"):
+                t_stack.grid_page.load_grid(
+                    state.get("title", ""),
+                    state.get("fetch_func"),
+                    state.get("initial_params"),
+                    state.get("card_renderer"),
+                    state.get("show_filter_bar", True),
+                    state.get("media_type", "movie")
+                )
+                
         elif prev_index == 3 and state and t_stack.person_page:
-            t_stack.person_page.person_id = state
-            t_stack.person_page.load_person(state)
+            current_person_id = getattr(t_stack.person_page, "person_id", None)
+            if current_person_id != state:
+                t_stack.person_page.person_id = state
+                t_stack.person_page.load_person(state)
+                
+        elif prev_index == 4 and state and t_stack.season_page:
+            current_tv_id = getattr(t_stack.season_page, "tv_id", None)
+            current_season = getattr(t_stack.season_page, "season_number", None)
+            if current_tv_id != state.get("tv_id") or current_season != state.get("season_number"):
+                t_stack.season_page.load_season(state.get("tv_id"), state.get("tv_name"), state.get("season_number"))
 
         t_stack.setCurrentIndex(prev_index)
 

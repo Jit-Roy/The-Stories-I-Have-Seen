@@ -61,23 +61,8 @@ class HorizontalCarousel(QWidget):
             if item.widget():
                 item.widget().deleteLater()
                 
-        self._pending_items = items[:]
-        self._render_chunk()
-        
-    def _render_chunk(self):
-        if not hasattr(self, '_pending_items') or not self._pending_items:
-            return
-            
-        from PySide6.QtCore import QTimer
-        
-        chunk = self._pending_items[:4]
-        self._pending_items = self._pending_items[4:]
-        
-        for item in chunk:
+        for item in items:
             self.h_layout.addWidget(self.card_creator_func(item))
-            
-        if self._pending_items:
-            QTimer.singleShot(5, self._render_chunk)
 
     def refresh_status(self):
         import tmdb_api

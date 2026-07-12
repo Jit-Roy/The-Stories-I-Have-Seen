@@ -119,7 +119,7 @@ class CollectionPage(QWidget):
             
         self.render_timer = QTimer(self)
         self.render_timer.timeout.connect(self._render_chunk)
-        self.render_timer.start(5)
+        self.render_timer.start(0)
         
     def _render_chunk(self):
         if not hasattr(self, "pending_items") or not self.pending_items:
@@ -128,8 +128,8 @@ class CollectionPage(QWidget):
             self.flow.reflow(self.scroll.viewport().width() if self.scroll.viewport() else None)
             return
             
-        chunk = self.pending_items[:15]
-        self.pending_items = self.pending_items[15:]
+        chunk = self.pending_items[:50]
+        self.pending_items = self.pending_items[50:]
         
         for item_type, data in chunk:
             if item_type == "movie":

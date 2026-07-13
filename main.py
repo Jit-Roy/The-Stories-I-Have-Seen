@@ -50,7 +50,7 @@ def main():
     # Setting AppUserModelID globally BEFORE QApplication fixes the Windows 11 
     # taskbar click-to-minimize bug by properly syncing the process HWND group,
     # while retaining the 0ms icon load because it happens before Qt initializes.
-    myappid = 'TheStoriesIHaveSeen.app.1.0'
+    myappid = 'Stories.app.1.0'
     try:
         # Only set this manually if running from Python. 
         # Setting it in a compiled .exe detaches it from the embedded executable icon!
@@ -60,7 +60,12 @@ def main():
         pass
         
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon("assets/icons/app_icon.ico"))
+    
+    # Use absolute path based on the script's original location (pythonguis.com solution)
+    from pathlib import Path
+    basedir = Path(__file__).resolve().parent
+    abs_icon = str(basedir / "assets" / "icons" / "app_icon.ico")
+    app.setWindowIcon(QIcon(abs_icon))
     
     # Increase maximum threads to ensure parallel image fetching & scaling without blocking
     from PySide6.QtCore import QThreadPool
@@ -97,7 +102,7 @@ def main():
     if not getattr(sys, 'frozen', False):
         from PySide6.QtCore import QTimer
         from PySide6.QtGui import QIcon
-        QTimer.singleShot(0, lambda: window.setWindowIcon(QIcon("assets/icons/app_icon.ico")))
+        QTimer.singleShot(0, lambda: window.setWindowIcon(QIcon(abs_icon)))
     
     sys.exit(app.exec())
 

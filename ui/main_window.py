@@ -94,7 +94,10 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1200, 800)
         
         from PySide6.QtGui import QIcon
-        self.setWindowIcon(QIcon("assets/icons/app_icon.ico"))
+        from pathlib import Path
+        basedir = Path(__file__).resolve().parent.parent
+        abs_icon = str(basedir / "assets" / "icons" / "app_icon.ico")
+        self.setWindowIcon(QIcon(abs_icon))
         
         self.all_detail_pages = []
         self.all_grid_pages = []
@@ -305,7 +308,12 @@ class MainWindow(QMainWindow):
         self.settings_btn.setIcon(QIcon("assets/icons/settings_active.svg" if self.settings_btn.isChecked() else "assets/icons/settings.svg"))
         if hasattr(self, 'logo_icon'):
             self.logo_icon.setPixmap(QIcon("assets/icons/main_logo.svg").pixmap(36, 36))
-        self.setWindowIcon(QIcon("assets/icons/app_icon.ico"))
+            
+        from pathlib import Path
+        basedir = Path(__file__).resolve().parent.parent
+        abs_icon = str(basedir / "assets" / "icons" / "app_icon.ico")
+        self.setWindowIcon(QIcon())
+        self.setWindowIcon(QIcon(abs_icon))
 
         if hasattr(self, 'search_glow'):
             from ui.theme_manager import ThemeManager

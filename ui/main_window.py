@@ -139,6 +139,12 @@ class MainWindow(QMainWindow):
         # Indices: 0: Discover, 1: Movies, 2: TV, 3: Collection, 4: Wishlist, 5: Analytics, 6: Downloads, 7: Settings
         for idx, main_widget in enumerate([self.discover_page, self.movies_page, self.tv_page, self.collection_page, self.wishlist_page, self.analytics_page, self.downloads_page, self.settings_page]):
             
+            # YIELD TO OS TO PREVENT HANG!
+            # Adding 40 heavy widgets synchronously locks the UI thread, causing Windows 11 to 
+            # assume the app is frozen during startup and drop the taskbar icon!
+            from PySide6.QtWidgets import QApplication
+            QApplication.processEvents()
+
             t_stack = TabStack(idx)
             t_stack.addWidget(main_widget) # Inner Index 0
             t_stack.main_page = main_widget
@@ -308,12 +314,6 @@ class MainWindow(QMainWindow):
         self.settings_btn.setIcon(QIcon("assets/icons/settings_active.svg" if self.settings_btn.isChecked() else "assets/icons/settings.svg"))
         if hasattr(self, 'logo_icon'):
             self.logo_icon.setPixmap(QIcon("assets/icons/main_logo.svg").pixmap(36, 36))
-            
-        from pathlib import Path
-        basedir = Path(__file__).resolve().parent.parent
-        abs_icon = str(basedir / "assets" / "icons" / "app_icon.ico")
-        self.setWindowIcon(QIcon())
-        self.setWindowIcon(QIcon(abs_icon))
 
         if hasattr(self, 'search_glow'):
             from ui.theme_manager import ThemeManager

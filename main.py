@@ -50,7 +50,7 @@ def main():
     # Setting AppUserModelID globally BEFORE QApplication fixes the Windows 11 
     # taskbar click-to-minimize bug by properly syncing the process HWND group,
     # while retaining the 0ms icon load because it happens before Qt initializes.
-    myappid = 'Stories.app.1.0'
+    myappid = 'MyStories.app.1.0'
     try:
         # Only set this manually if running from Python. 
         # Setting it in a compiled .exe detaches it from the embedded executable icon!

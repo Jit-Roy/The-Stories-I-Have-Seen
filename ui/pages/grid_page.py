@@ -175,6 +175,78 @@ class GridPage(QWidget):
             # Update _original_fetch_func so subsequent filter changes also work
             self._original_fetch_func = self.fetch_func
 
+        elif getattr(self, "_grid_media_type", "") == "mixed":
+            # ── Mixed-Media Grid (Local Filtering Engine) ───────────────────
+            original = self._original_fetch_func
+            
+            show_me = params.get("show_me", "all")
+            with_genres = params.get("with_genres", "")
+            genre_set = {int(x) for x in with_genres.split(",") if x.isdigit()} if with_genres else set()
+                
+            min_year = params.get("primary_release_date.gte")
+            max_year = params.get("primary_release_date.lte")
+            min_rating = params.get("vote_average.gte")
+            sort_by = params.get("sort_by", "popularity.desc")
+            target_lang = params.get("with_original_language")
+            target_country = params.get("with_origin_country")
+            
+            # Fetch all items from the original fetch_func (fast from cache)
+            all_items = []
+            page = 1
+            while True:
+                raw = original(page)
+                if not raw: break
+                all_items.extend(raw)
+                page += 1
+                if page > 50: break # Safety limit
+                    
+            filtered = []
+            for m in all_items:
+                st = m.get("status")
+                if show_me == "unseen" and st == "watched": continue
+                if show_me == "unseen_unwishlisted" and st in ("watched", "watch_later"): continue
+                
+                if genre_set:
+                    m_genres = set(m.get("genre_ids") or [])
+                    if not m_genres.intersection(genre_set): continue
+                        
+                if target_lang and m.get("original_language") != target_lang:
+                    continue
+                    
+                if target_country:
+                    m_countries = m.get("origin_country") or []
+                    if isinstance(m_countries, str):
+                        m_countries = [m_countries]
+                    if target_country not in m_countries:
+                        continue
+                        
+                date_str = m.get("release_date") or m.get("first_air_date") or ""
+                if min_year and date_str < min_year: continue
+                if max_year and date_str > max_year: continue
+                
+                if min_rating is not None:
+                    try:
+                        val = m.get("vote_average")
+                        if float(val if val is not None else 0) < float(min_rating): continue
+                    except (ValueError, TypeError):
+                        pass
+                        
+                filtered.append(m)
+                
+            rev = sort_by.endswith(".desc")
+            if sort_by.startswith("vote_average"):
+                filtered.sort(key=lambda x: float(x.get("vote_average") or 0), reverse=rev)
+            elif sort_by.startswith("primary_release_date"):
+                filtered.sort(key=lambda x: x.get("release_date") or x.get("first_air_date") or "", reverse=rev)
+            else:
+                filtered.sort(key=lambda x: float(x.get("popularity") or 0), reverse=rev)
+                
+            def local_fetch(p, items=filtered):
+                start = (p - 1) * 20
+                return items[start:start+20]
+                
+            self.fetch_func = local_fetch
+
         else:
             # ── Custom-fetch grid ────────────────────────────────────────────
             # Restore the original fetch_func, then optionally wrap with

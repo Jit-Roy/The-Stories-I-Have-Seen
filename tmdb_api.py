@@ -131,6 +131,9 @@ def _format_movie(item):
         "backdrop_path": f"{BACKDROP_BASE_URL}{backdrop}" if backdrop else None,
         "release_date": item.get("release_date"),
         "vote_average": item.get("vote_average"),
+        "genre_ids": item.get("genre_ids", []),
+        "original_language": item.get("original_language", ""),
+        "origin_country": item.get("origin_country", []),
         "media_type": "movie"
     }
 
@@ -144,6 +147,9 @@ def _format_tv(item):
         "backdrop_path": f"{BACKDROP_BASE_URL}{backdrop}" if backdrop else None,
         "release_date": item.get("first_air_date"),
         "vote_average": item.get("vote_average"),
+        "genre_ids": item.get("genre_ids", []),
+        "original_language": item.get("original_language", ""),
+        "origin_country": item.get("origin_country", []),
         "media_type": "tv"
     }
 

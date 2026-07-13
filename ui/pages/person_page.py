@@ -219,7 +219,8 @@ class PersonPage(QWidget):
                     self.show_grid(
                         f"Filmography: {data.get('name', 'Unknown')}", 
                         lambda page=1: tmdb_api.get_person_full_credits(data.get("id"), page=page),
-                        {"with_cast": str(data.get("id")), "sort_by": "popularity.desc"}
+                        initial_params=None,
+                        media_type="mixed"
                     )
 
             self.carousel = HorizontalCarousel(

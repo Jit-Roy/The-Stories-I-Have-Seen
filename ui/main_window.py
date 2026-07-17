@@ -836,3 +836,37 @@ class MainWindow(QMainWindow):
             if hasattr(self.home_page, "hero_carousel") and self.home_page.hero_carousel is not None:
                 self.home_page.hero_carousel.refresh_status()
             self.home_page.refresh_carousels()
+
+    def closeEvent(self, event):
+        from download_manager import DownloadManager
+        dm = DownloadManager()
+        
+        # Safely pause all active downloads so the cache doesn't corrupt!
+        active_ids = []
+        for tmdb_id, info in dm.active_downloads.items():
+            status = info.get("status", "")
+            if status in ["Downloading...", "Probing servers...", "Pending selection...", "Initializing...", "Resuming..."]:
+                active_ids.append(tmdb_id)
+                
+        if active_ids:
+            for tmdb_id in active_ids:
+                dm.pause_download(tmdb_id)
+            
+            # Give background threads up to 3 seconds to catch the pause signal 
+            # and flush the .ytdl cache state to disk safely.
+            from PySide6.QtCore import QCoreApplication
+            import time
+            start_time = time.time()
+            while time.time() - start_time < 3:
+                all_paused = True
+                for tmdb_id in active_ids:
+                    status = dm.active_downloads.get(tmdb_id, {}).get("status", "")
+                    if status not in ["Paused", "Completed"] and not status.startswith("Failed") and not status.startswith("Error"):
+                        all_paused = False
+                        break
+                if all_paused:
+                    break
+                QCoreApplication.processEvents()
+                time.sleep(0.1)
+                
+        super().closeEvent(event)

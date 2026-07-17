@@ -357,7 +357,12 @@ class HeroCarousel(QWidget):
         self.inner.resize(self.width() * (len(self.movies) + 1), self.height())
         for slide in self.slides:
             slide.setFixedSize(self.width(), self.height())
-        self.inner.move(-self.width() * self.current_idx, 0)
+            
+        from PySide6.QtCore import QPropertyAnimation, QPoint
+        if self.anim.state() == QPropertyAnimation.State.Running:
+            self.anim.setEndValue(QPoint(-self.width() * self.current_idx, 0))
+        else:
+            self.inner.move(-self.width() * self.current_idx, 0)
         
     def next_slide(self):
         if not self.movies: return
@@ -373,6 +378,22 @@ class HeroCarousel(QWidget):
         self.anim.start()
         if restart_timer:
             self.timer.start(6000)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if hasattr(self, 'movies') and self.movies:
+            self.timer.start(6000)
+            from PySide6.QtCore import QPropertyAnimation
+            if self.anim.state() != QPropertyAnimation.State.Running:
+                self.inner.move(-self.width() * self.current_idx, 0)
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self.timer.stop()
+        from PySide6.QtCore import QPropertyAnimation
+        if self.anim.state() == QPropertyAnimation.State.Running:
+            self.anim.stop()
+            self.inner.move(-self.width() * self.current_idx, 0)
 
     def refresh_status(self):
         """Re-read DB status for every slide and update their buttons."""

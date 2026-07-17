@@ -386,12 +386,15 @@ class DownloadManager(QObject):
 
     def remove_download(self, tmdb_id):
         if tmdb_id in self.active_downloads:
+            dl_info = self.active_downloads[tmdb_id]
+            movie_data = dl_info.get("movie_data", {})
             abort_event = self.abort_events.get(tmdb_id)
             if abort_event:
                 abort_event.set()
                 del self.abort_events[tmdb_id]
             del self.active_downloads[tmdb_id]
             self.save_history()
+            self.download_removed.emit(tmdb_id)
 
     def _on_worker_progress(self, tmdb_id, data):
         if tmdb_id not in self.active_downloads:

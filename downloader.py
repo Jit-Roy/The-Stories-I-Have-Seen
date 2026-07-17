@@ -1247,6 +1247,7 @@ def download_raw(url, page_url, cookies=None, progress_callback=None, download_p
         log(f"\n[+] Raw Download completed successfully! File saved as {out_filename}")
     except Exception as e:
         print(f"\n[!] Raw download failed: {e}")
+        raise e
 
 def download_media(url, page_url=None, cookies=None, headers=None, progress_callback=None, download_path=None, abort_event=None, filename_prefix=None, audio_format_id=None, subtitle_lang=None):
     from yt_dlp.utils import check_executable
@@ -1306,10 +1307,11 @@ def download_media(url, page_url=None, cookies=None, headers=None, progress_call
             'hls_prefer_native': True,
             'enable_file_urls': True,
             'concurrent_fragment_downloads': 5,
-            'retries': 30,
-            'fragment_retries': 30,
-            'file_access_retries': 30,
-            'socket_timeout': 60,
+            'retries': 5,
+            'fragment_retries': 5,
+            'file_access_retries': 5,
+            'socket_timeout': 15,
+            'skip_unavailable_fragments': True,
             'extractor_args': {'generic': {'impersonate': ['chrome']}},
             'http_headers': http_headers,
         }
@@ -1326,7 +1328,8 @@ def download_media(url, page_url=None, cookies=None, headers=None, progress_call
             pbar = None
             def yt_dlp_tqdm_hook(d):
                 if abort_event and abort_event.is_set():
-                    raise DownloadPausedException("Download was paused.")
+                    from yt_dlp.utils import DownloadCancelled
+                    raise DownloadCancelled("Download was paused.")
                     
                 nonlocal pbar
                 if d['status'] == 'downloading':
@@ -1397,6 +1400,8 @@ def download_media(url, page_url=None, cookies=None, headers=None, progress_call
         log("\n[+] Download completed successfully!")
 
     except Exception as e:
+        if abort_event and abort_event.is_set():
+            raise DownloadPausedException("Download was paused.")
         import traceback
         print(f"\n[!] yt-dlp failed: {e}")
         traceback.print_exc()
